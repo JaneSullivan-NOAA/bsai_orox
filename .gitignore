@@ -1,0 +1,65 @@
+# R projects
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# usernames and passwords for db connections
+database.csv 
+
+# confidential fishery dependent data
+*confidential*
+
+# old assessment archive
+archive
+
+# other rockfish photos for presentations
+photos
+
+# ADMB files
+*.cov
+*.dep
+*.hes
+*.tmp
+*.log
+*.b01
+*.bar
+#*.cor
+*.cout
+*.cpp
+*.ecm
+*.eva
+*.exe
+*.hst
+*.htp
+*.mc2
+*.mcm
+*.obj
+*.p01
+#*.par
+#*.psv
+*.r01
+#*.rep
+*.std
+*.out
+*.ps
+sims
+dgs2
+diags
+*.b02
+*.p02
+*.prf
+*.r02
+*.plt
+*.pin
+
+# other file types we don't want to track
+*.xlsx
+*.xlsm
+*.docx
+*.pptx
+*.png
+*.Rdata
+
+# Windows thumbnail cache files
+Thumbs.db
