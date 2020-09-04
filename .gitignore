@@ -16,6 +16,9 @@ archive
 # other rockfish photos for presentations
 photos
 
+# safe documents
+safe
+
 # ADMB files
 *.cov
 *.dep
