@@ -8,11 +8,10 @@
 #' @return object of type 'list' with ADMB outputs as list elements
 #' @export
 #' 
-read_admb <- function(tplfile, repfile)
-{
+read_admb <- function(tplfile, repfile) {
   ret <- read_fit(tplfile)
   fn <- paste0(repfile, ".rep")
-  A <- read_rep(fn)
+  A <- read_rep(fn, repfile)
   A$fit <- ret
   A$run_name <- fn
   pfn <- paste0(tplfile, ".psv")
@@ -63,7 +62,7 @@ read_fit <- function(tplfile)
 #' @return object of type "list" with ADMB outputs therein
 #' @export
 #' 
-read_rep <- function(repfile)
+read_rep <- function(fn, repfile)
 {
   options(warn = -1) # Suppress the NA message in the coercion to double
   repfile <- scan(fn, what = "character", flush = TRUE, blank.lines.skip = FALSE, quiet = TRUE, na.strings = c("nan","-nan"))

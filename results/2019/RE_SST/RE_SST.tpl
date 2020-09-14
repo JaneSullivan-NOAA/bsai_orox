@@ -97,7 +97,6 @@ FINAL_SECTION
   write_R(SD_biom_TOT);
   write_R(biom_TOT_UCI);
   write_R(biom_TOT_LCI);
-  write_R(yrs_srv);
   write_R(srv_est);
   write_R(srv_sd);
   write_R(yrs);
