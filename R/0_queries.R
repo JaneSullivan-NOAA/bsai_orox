@@ -1,6 +1,11 @@
 # Queries for BSAI OROX
 # Contact: jane.sullivan@noaa.gov
 # Last updated: Sep 2020
+# devtools::session_info()
+# version  R version 4.0.2 (2020-06-22)
+# os       Windows 10 x64              
+# system   x86_64, mingw32             
+# ui       RStudio 
 
 # Set up ----
 
@@ -38,6 +43,7 @@ query <- paste0("select   species_code, species_name, common_name
 spp <- sqlQuery(channel_akfin, query) %>% 
   rename_all(tolower) 
 
+spp %>% filter(grepl("dusky", common_name))
 spp %>% filter(grepl("thornyhead|rockfish", common_name))
 
 # Seven most common BSAI Orox
@@ -47,7 +53,8 @@ orox <- c("dusky rockfish", "shortspine thornyhead", "redstripe rockfish",
 
 # Other Orox species that sometimes show up? catch tables
 other_orox <- c("black rockfish", "darkblotched rockfish", "rosethorn rockfish",
-                "silvergray rockfish", "rockfish unid.", "dusky and dark rockfishes unid.")
+                "silvergray rockfish", "rockfish unid.", "dusky and dark rockfishes unid.",
+                "yellowmouth rockfish", "broadfin thornyhead", "longspine thornyhead")
 
 codes <- spp %>% 
   filter(common_name %in% c(orox, other_orox)| grepl("thornyhead", common_name)) %>% 
@@ -55,10 +62,23 @@ codes <- spp %>%
 
 codes_string <- toString(sprintf("'%s'", codes)) # allows you to pass vector into sql query
 
-spp %>% filter(species_code %in% codes) %>% write_csv(paste0("data/bsai_orox_spp_lookup.csv"))
+spp %>% 
+  filter(species_code %in% codes) %>% 
+  write_csv(paste0("data/bsai_orox_spp_lookup.csv"))
 
 # Shortspine Thornyhead = SST = 30020 = 350
 # Dusky = 30152 = 330
+
+# AKR/ADFG (3 digits) uses different species codes than RACE (5 digits). You
+# need the 3 digit codes to pull observer data
+
+query <- "select   distinct species_code, common_name, scientific_name,
+                   race_species_num as species_code_race
+          from     norpac.atl_lov_species_code"
+
+akr_spp <- sqlQuery(channel_afsc, query) %>%
+  rename_all(tolower) %>%
+  filter(species_code_race %in% codes)
 
 # INPFC_AREA look up ----
 
@@ -198,7 +218,93 @@ comps <- fsh_len %>%
   bind_rows(ai_len %>% 
               select(species_code, year, length, frequency) %>% 
               mutate(source = "AI survey")) %>% 
+  write_csv(paste0(dat_path, "/lengths_sstdusky_", YEAR, ".csv"))
  
+# Catch ----
+
+# 3 digit species codes - can't find a look up table for this one.
+# northern rockfish (136) currently in species_group_name = "Other Rockfish"
+# group but shouldn't be. removed from bsai_orox3 list
+
+# query <- "select   distinct agency_species_code, species_name, species_group_name
+#           from     council.comprehensive_blend_ca
+#           where    species_group_name = 'Other Rockfish'"
+# catch_spp <- sqlQuery(channel_akfin, query)
+
+# dusky = (154, 172)
+bsai_orox3 <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142, 
+                150, 156, 155, 175, 149, 159, 166, 146, 184, 137,
+                138, 178, 182, 179)
+
+# these are species classified in catch as "Other Rockfish" that occur primarily
+# in GOA. Keep these in just in case any of these spp start to show up in the
+# BSAI catch
+goa_orox3 <- c(179, 182, 178, 138, 137, 184, 146, 149, 155, 156, 147, 148)
+
+codes_string2 <- toString(sprintf("'%s'", c(bsai_orox3, goa_orox3))) # allows you to pass vector into sql query
+
+# year >= 2019 and
+
+query <- "select   *
+          from     council.comprehensive_blend_ca
+          where    agency_species_code in (%s) and
+                   fmp_area = 'BSAI' and
+                   year >= 2003"
+
+catch <- sqlQuery(channel_akfin, sprintf(query, codes_string2)) %>% 
+  rename_all(tolower) 
+
+catch %>% write_csv(paste0(raw_path, "/bsai_orox_catch_raw_2003_", YEAR+1, "_confidential.csv"))
+
+catch_clean <- catch %>% 
+  mutate(species = str_replace(species_name, "rockfish, ", ""),
+         species = str_replace(species, fixed(" (red snapper)"), ""),
+         species = str_replace(species, fixed(" (idiots)"), "")) %>% 
+  select(year, date = catch_activity_date, fmp = fmp_area, fmp_subarea,
+         nmfs_area = reporting_area_code, gear = agency_gear_code,
+         retained_or_discarded, target = trip_target_name, 
+         species_code = agency_species_code, species_group = species_group_name,
+         species_name = species, tons = weight_posted)
+
+catch_clean %>% write_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR+1, "_confidential.csv"))
+
+# Proportion SST ----
+
+# Fishery catch is only reported as "thornyhead", so use observer data to
+# estimate proportion SST from other thornyheads
+
+thorny <- akr_spp %>% filter(grepl("THORNY", common_name))
+
+thorny_string <- toString(sprintf("'%s'", thorny$species_code)) 
+
+query <- "select    a.year, a.species, a.species_name, a.sample_number, a.sample_size,
+                    a.sample_weight, a.extrapolated_weight, a.extrapolated_number, 
+                    a.percent_retained, b.gear_type, b.latdd_start, b.londd_start,
+                    b.nmfs_area, a.haul_join
+                    
+          from      obsint.debriefed_spcomp a
+          
+          join      obsint.debriefed_haul b on a.haul_join = b.haul_join
+          
+          where     a.species in (%s) and 
+                    a.year >= 2003 and
+                    b.nmfs_area between 500 and 543"
+
+observed <- sqlQuery(channel_afsc, sprintf(query, thorny_string)) %>% 
+  rename_all(tolower) 
+
+observed %>% write_csv(paste0(raw_path, "/obs_thornyheads_2003_", YEAR+1, ".csv"))
+
+observed %>% 
+  mutate(thorny = ifelse(species == 350, "shortspine thornyhead", "other thornyhead"),
+         fmp_subarea = ifelse(between(nmfs_area, 500, 540), "BS", "AI")) %>% 
+  write_csv(paste0(dat_path, "/obs_thornyheads_2003_", YEAR+1, ".csv"))
+
+# observed %>% filter(species == 350) %>% count(year, haul_join) %>% group_by(year) %>% summarize(tst = length(which(n >= 3)))
+# observed %>% filter(species == 350) %>% count(haul_join) %>% filter(n > 10)
+# observed %>% filter(species == 350) %>% count(year, gear_type, haul_join) %>% group_by(year, gear_type) %>% summarize(n_hauljoins_3plusrows = length(which(n >= 3))) #%>% View()
+# observed %>% filter(haul_join == 24213002718000001024)
+
 # # EBS biomass EDA ----
 # 
 # # There are multiple EBS Biomass options in AFKIN.AFSC.

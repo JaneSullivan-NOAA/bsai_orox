@@ -1,6 +1,11 @@
 # Biological data (length comps) for SST and Duskies
 # Contact: jane.sullivan@noaa.gov
 # Last updated: Sep 2020
+# devtools::session_info()
+# version  R version 4.0.2 (2020-06-22)
+# os       Windows 10 x64              
+# system   x86_64, mingw32             
+# ui       RStudio 
 
 # Set up ----
 
@@ -18,6 +23,7 @@ lapply(libs, library, character.only = TRUE)
 # Data ----
 
 lengths <- read_csv(paste0(dat_path, "/lengths_sstdusky_", YEAR, ".csv"))
+spp <- read_csv(paste0("data/bsai_orox_spp_lookup.csv"))
 
 # Get length comps ----
 
@@ -34,10 +40,12 @@ comps %>% group_by(source, species_code, year) %>% summarize(tst = sum(prop)) %>
 
 # Plot dusky ----
 
-ggplot(data = comps %>% filter(species_code == 30152 & between(length, 20, 50)), 
+ggplot(data = comps %>% 
+         filter(year >= 2002 & species_code == 30152 & between(length, 20, 50)), 
        aes(x = length, y = factor(year), height = prop, fill = source)) +
-  geom_density_ridges(stat = "identity", col = "white", alpha = 0.5, #alpha = 0.8
-                      panel_scaling = TRUE, size = 1) +
+  geom_density_ridges(stat = "identity", col = "lightgrey", alpha = 0.5, 
+                      panel_scaling = TRUE, size = 0.5) +
+  # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
   scale_fill_manual(values = c("grey30", "#00BFC4")) + 
   labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Dusky rockfish") +
   theme_light() +
@@ -48,11 +56,13 @@ ggsave(paste0(out_path, "/lencomps_dusky_", YEAR, ".png"),
 
 # Plot SST ----
 
-ggplot(data = comps %>% filter(species_code == 30020 & between(length, 10, 70)), 
+ggplot(data = comps %>% 
+         filter(year >= 2002 & species_code == 30020 & between(length, 10, 70)), 
        aes(x = length, y = factor(year), height = prop, fill = source)) +
   geom_density_ridges(stat = "identity", col = "white", alpha = 0.5, #alpha = 0.8
-                      panel_scaling = TRUE, size = 1) +
+                      panel_scaling = TRUE, size = 0.5) +
   scale_fill_manual(values = c("grey30", "#00BFC4")) + 
+  # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
   labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Shortspine thornyhead") +
   theme_light() +
   theme(legend.position = "top",
