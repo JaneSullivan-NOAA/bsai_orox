@@ -20,13 +20,13 @@ lapply(libs, library, character.only = TRUE)
 db <- read_csv("database.csv") # user-specific usernames and passwords, not tracked on github
 
 database_afsc <- "afsc"
-username_afsc <- db$username_afsc #"sullivanj"
-password_afsc <- db$password_afsc #"ZwzkgB$7Es69LQ$3"
+username_afsc <- db$username_afsc 
+password_afsc <- db$password_afsc 
 channel_afsc <- odbcConnect(database_afsc, uid = username_afsc, pwd = password_afsc, believeNRows=FALSE)
 
 database_akfin <- "akfin" 
-username_akfin <- db$username_akfin #"jsullivan"
-password_akfin <- db$password_akfin #"sculja22"
+username_akfin <- db$username_akfin
+password_akfin <- db$password_akfin
 channel_akfin <- odbcConnect(database_akfin, uid = username_akfin, pwd = password_akfin, believeNRows=FALSE)
 
 # Create a year subdirectory to store annual assessment data
