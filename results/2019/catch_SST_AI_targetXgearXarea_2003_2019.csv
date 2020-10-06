@@ -1,2 +1,18 @@
-Gear,Target fishery,Total (t),% of total
-Total (t),NA,0,0
+Gear,Target fishery,541,542,543,Total (t),% of total
+Longline,Sablefish,471.1,344.3,202,1017.3,41.1
+Bottom trawl,Rockfish,32.9,284.5,533.1,850.5,34.3
+Longline,Halibut,89.1,92.4,23,204.5,8.3
+Bottom trawl,Atka mackerel,8.7,68.9,104.3,181.9,7.3
+Longline,Flatfish,7.7,69.1,0,76.8,3.1
+Longline,Pacific cod,26.4,12.5,19,58,2.3
+Longline,Other,5.8,40.2,0,46,1.9
+Longline,Rockfish,0.7,5.5,12.6,18.8,0.8
+Bottom trawl,Flatfish,11.7,0,0,11.7,0.5
+Pot,Sablefish,4.3,0.1,1,5.4,0.2
+Bottom trawl,Other,5.3,0,0,5.3,0.2
+Bottom trawl,Pacific cod,0.7,0,0.4,1,0
+Bottom trawl,Pollock,0.1,0.1,0,0.2,0
+Jig,Pacific cod,0,0,0,0,0
+Pot,Pacific cod,0,0,0,0,0
+Pot,Rockfish,0,0,0,0,0
+Total (t),NA,664.5,917.6,895.4,2477.5,100

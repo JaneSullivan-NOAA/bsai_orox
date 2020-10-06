@@ -67,12 +67,12 @@ thorny <- read_csv(paste0(dat_path, "/obs_thornyheads_2003_", YEAR+1, ".csv"))
 load("data/map_ak_land.RData")
 load("data/map_nmfs_areas.RData")
 
-# SST/nonSST biomass ----
+# SST/non-SST biomass ----
 
 # Stock structure for assessment: splits by SST and non-SST, also AI survey
 # split into Southern Bering Sea and AI
-data_sst_nonsst <- full_biom %>% 
-  mutate(species = ifelse(species_code == 30020, "SST", "nonSST"),
+data_sst_nonSST <- full_biom %>% 
+  mutate(species = ifelse(species_code == 30020, "SST", "non-SST"),
          region = ifelse(survey == "AI" & area == "SBS", "SBS",
                          ifelse(survey == "AI" & grepl("AI", area), "AI",
                                 survey))) %>% 
@@ -84,30 +84,30 @@ data_sst_nonsst <- full_biom %>%
   mutate(cv = ifelse(biomass == 0, 0, sqrt(var) / biomass)) %>% 
   arrange(species, region, year) 
 
-out_sst_nonsst <- run_re_model(data = data_sst_nonsst)
+out_sst_nonSST <- run_re_model(data = data_sst_nonSST)
 
 # Clean RE output ----
 
 # Survey biomass 95% confidence intervals (note that this is just replicating
 # how RACE/GAP calculates them)
-data_sst_nonsst <- data_sst_nonsst %>% 
+data_sst_nonSST <- data_sst_nonSST %>% 
   mutate(lci = biomass - 1.96 * sqrt(var),
          uci = biomass + 1.96 * sqrt(var),
          lci = ifelse(lci < 0, 0, lci),
          region = factor(region, levels = c("AI", "SBS", "EBS_SHELF", "EBS_SLOPE")))
 
-re_total <- out_sst_nonsst$re_output %>% filter(region == "TOTAL")
-re_area <- out_sst_nonsst$re_output %>% filter(region != "TOTAL") %>% 
+re_total <- out_sst_nonSST$re_output %>% filter(region == "TOTAL")
+re_area <- out_sst_nonSST$re_output %>% filter(region != "TOTAL") %>% 
   mutate(region = factor(region, levels = c("AI", "SBS", "EBS_SHELF", "EBS_SLOPE")))
 
-write_csv(out_sst_nonsst$re_output, paste0(out_path, "/re_biomass_", YEAR, ".csv"))
+write_csv(out_sst_nonSST$re_output, paste0(out_path, "/re_biomass_", YEAR, ".csv"))
 
 # Calculate 95% CI by FMP (BS, AI), the level at which ABC/OFL are defined.
 # Follow methods in tpl used to combine survey areas and calculate total
 # biomass. TODO: ask PH if there is a reference for these formulas
-fmp_biom <- out_sst_nonsst$area_sd %>% 
+fmp_biom <- out_sst_nonSST$area_sd %>% 
   left_join(re_area %>% select(species, year, region, re_est)) %>% 
-  mutate(FMP = ifelse(region == "AI", "AI", "BS"),
+  mutate(FMP = ifelse(region == "AI", "AI", "EBS"),
          sd_numer = exp(2 * biomsd + biomsd_sd ^ 2) * (exp(biomsd_sd ^ 2) - 1),
          sd_denom = exp(biomsd + 0.5 * biomsd_sd ^ 2)) %>% 
   group_by(species, year, FMP) %>% 
@@ -123,7 +123,7 @@ write_csv(fmp_biom, paste0(out_path, "/re_biomass_fmp_", YEAR, ".csv"))
 # Tier 5: FOFL = M; FABC = 0.75 * M; OFL/ABC = FOFL/FABC * most recent biomass
 # estimate
 
-# SST and nonSST have different natural moralities. TODO: evaluate current M
+# SST and non-SST have different natural moralities. TODO: evaluate current M
 # assumptions, create consistency with GOA Orox
 
 natmat <- tibble(species = unique(re_total$species),
@@ -153,12 +153,32 @@ specs_clean <- specs %>%
   pivot_longer(cols = -species) %>% 
   distinct() %>% 
   bind_rows(specs %>% 
-              select(species, Area = FMP, ABC = FMP_ABC, OFL = FMP_OFL) %>% 
-              pivot_longer(col = c("ABC", "OFL")) %>% 
+              select(species, Area = FMP, ABC = FMP_ABC) %>% 
+              pivot_longer(col = c("ABC")) %>% 
               mutate(name = paste0(Area, " ", name)) %>%
               select(-Area)) %>% 
   select(Species = species, Variable = name, Value = value) %>% 
-  arrange(Species) 
+  ungroup()
+
+# Include summary for all OR - NOTE: Natural mortality and fishing mortality
+# rates are specified separately for the SST and non-SST portions of the Other
+# Rockfish complex.
+specs_clean <- specs_clean %>% 
+  bind_rows(specs_clean %>% 
+  filter(Variable %in% c("Biomass", "OFL", "maxABC", "ABC", "AI ABC", "BS ABC")) %>% 
+  pivot_wider(id_cols = Species, names_from = "Variable", values_from = "Value", values_fill = 0) %>% 
+  summarize_at(vars(-Species), list(sum)) %>% 
+  mutate(Species = "All Other Rockfish",
+         M = NA,
+         F_OFL = NA,
+         maxF_ABC = NA,
+         F_ABC = NA) %>% 
+  pivot_longer(cols = -Species, names_to = "Variable", values_to = "Value")) %>%
+  mutate(Species = factor(Species, levels = c("SST", "non-SST", "All Other Rockfish"), ordered = TRUE),
+         Variable = factor(Variable, levels = c("M", "Biomass", "F_OFL", "maxF_ABC",
+                                                "F_ABC", "OFL", "maxABC", "ABC", "AI ABC", "BS ABC"),
+                           ordered = TRUE)) %>% 
+  arrange(Species, Variable)
 
 write_csv(specs_clean, paste0(out_path, "/specs_table_", YEAR, ".csv"))
 
@@ -229,7 +249,6 @@ catch_spp <- catch %>%
   bind_rows(catch_fmp_subarea %>% mutate(species_name = "total")) %>% 
   arrange(fmp_subarea, year, species_name)
 
-
 catch_spp_wide <- catch_spp %>% 
   pivot_wider(id_cols = c("year","fmp_subarea"),
               names_from = "species_name", values_from = "catch", values_fill = 0) %>% 
@@ -260,7 +279,7 @@ write_csv(f_catch_spp, paste0(out_path, "/catch_sppXarea_", YEAR, ".csv"))
 # Catch by area, complex, and species
 
 catch %>% 
-  mutate(complex = ifelse(species_name == "SST", "SST", "nonSST")) %>% 
+  mutate(complex = ifelse(species_name == "SST", "SST", "non-SST")) %>% 
   group_by(year, fmp_subarea, complex) %>% 
   summarize(catch = sum(tons)) %>%
   ggplot(aes(x = year, y = catch, fill = complex)) +
@@ -277,11 +296,11 @@ catch %>%
 ggsave(paste0(out_path, "/catch_complexXarea_", YEAR, ".png"), 
        dpi=300, height=4, width=7, units="in")
 
+# By area and major species
 tmp <- catch_spp %>% 
   filter(!species_name %in% c("total")) %>% 
   mutate(species_name2 = ifelse(species_name %in% c("dusky", "SST", "other thornyheads"),
                                 species_name, "other")) 
-
 tmp %>% 
   group_by(year, fmp_subarea, species_name2) %>% 
   summarize(catch = sum(catch)) %>% 
@@ -339,28 +358,56 @@ catch <- catch %>%
                             gear == "JIG" ~ "Jig"))
 
 # define fisheries by gear and target
-
 complex_byfishery <- catch %>% 
-  mutate(complex = ifelse(species_name == "SST", "SST", "nonSST"),
+  mutate(complex = ifelse(species_name == "SST", "SST", "non-SST"),
          fishery = paste(`Target fishery`, Gear, sep = " ")) 
 
+# Top 5 fisheries by catch and nmfs area
 complex_byfishery <- complex_byfishery %>% 
   group_by(fishery, complex) %>% 
   summarize(catch = sum(tons)) %>% 
   arrange(complex, -catch) %>%
-  # group_by(complex) %>% 
   ungroup() %>% 
   top_n(n = 5, wt = catch) %>% 
   mutate(top = "top") %>% 
   right_join(complex_byfishery) %>% 
   mutate(plot_fishery = case_when(top == "top" ~ fishery,
                                   grepl("trawl", fishery) ~ "Other trawl",
-                                  TRUE ~ "Other fixed gear")) %>% 
+                                  TRUE ~ "Other fixed gear"))
+
+# Complex by fishery and FMP subarea
+
+complex_byfishery_fmp <- complex_byfishery %>% 
+  group_by(year, fmp_subarea, plot_fishery, complex) %>% 
+  summarize(catch = sum(tons)) %>% 
+  arrange(complex, year) %>% 
+  ungroup() 
+
+complex_byfishery_fmp %>% 
+  complete(year, fmp_subarea, plot_fishery, complex, fill = list(catch = 0)) %>% 
+  ggplot(aes(x = year, y = catch, fill = plot_fishery)) +
+  geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
+  scale_fill_viridis(discrete = TRUE) +
+  facet_grid(fmp_subarea ~ complex) +
+  theme_minimal() +
+  theme(panel.grid.major = element_line(colour = "grey95"),
+        panel.grid.minor = element_line(colour = "grey95"),
+        axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
+        axis.ticks.x = element_line(colour = "black")) +
+  labs(x = NULL, y = "Catch (t)", fill = "Fishery")
+
+ggsave(paste0(out_path, "/catch_complexXfisheryXfmp_", YEAR, ".png"), 
+       dpi=300, height=6, width=7, units="in")
+
+complex_byfishery_fmp %>% 
+  group_by()
+# Complex by fishery and NMFS area
+complex_byfishery_nmfsarea <- complex_byfishery %>% 
   group_by(year, nmfs_area, plot_fishery, complex) %>% 
   summarize(catch = sum(tons)) %>% 
   arrange(complex, -catch) 
 
-complex_byfishery %>% 
+complex_byfishery_nmfsarea %>% 
   ungroup() %>% 
   complete(year, nmfs_area, plot_fishery, complex, fill = list(catch = 0)) %>% 
   filter(nmfs_area %in% c(517, 519, 521, 541, 542, 543)) %>% 
@@ -529,7 +576,7 @@ detailed_catch_byarea <- function(data) {
 
 # Duskies in the E Bering Sea
 df <- catch %>% 
-  filter(species_name %in% "dusky" & fmp_subarea == "BS")
+  filter(species_name %in% "dusky" & fmp_subarea == "EBS")
 dusky_bs <- detailed_catch_byarea(data = df)
 dusky_bs
 write_csv(dusky_bs, paste0(out_path, "/catch_dusky_BS_targetXgearXarea_2003_", YEAR, ".csv"))
@@ -541,32 +588,32 @@ dusky_ai <- detailed_catch_byarea(data = df)
 dusky_ai
 write_csv(dusky_ai, paste0(out_path, "/catch_dusky_AI_targetXgearXarea_2003_", YEAR, ".csv"))
 
-# SSTs - have to calculate proportions
-sst_df <- catch %>% 
-  filter(species_name %in% "thornyhead") %>%
-  left_join(prop_sst) %>% 
-  mutate(tons = tons * prop_sst,
-         species_name = "SST")
-
 # SST in BS
-df <- sst_df %>% filter(fmp_subarea == "BS")
+df <- catch %>% 
+  filter(species_name %in% "SST" & fmp_subarea == "EBS")
+
 sst_bs <- detailed_catch_byarea(data = df)
 sst_bs
 write_csv(sst_bs, paste0(out_path, "/catch_SST_BS_targetXgearXarea_2003_", YEAR, ".csv"))
 
 # SST in AI
-df <- sst_df %>% filter(fmp_subarea == "AI")
+df <- catch %>% 
+  filter(species_name %in% "SST" & fmp_subarea == "AI")
 sst_ai <- detailed_catch_byarea(data = df)
 sst_ai
 write_csv(sst_ai, paste0(out_path, "/catch_SST_AI_targetXgearXarea_2003_", YEAR, ".csv"))
 
-# Map
+# Map ----
 
 # load("data/nmfs_areas.Rdata")
 
 maps <- c("All Other Rockfish",
-          "Non-SST or Thornyhead",
-          "Thornyheads")
+          "Non-SST",
+          "SST")
+
+# Do you want all years or just current year?
+map_yrs <- YEAR
+# map_yrs <- unique(catch$year)
 
 for(i in 1:length(maps)) {
   
@@ -574,13 +621,13 @@ for(i in 1:length(maps)) {
   
   # Subset to plot
   if(ii == "All Other Rockfish") {
-    sub <- catch %>% filter(year == YEAR)
-  } else if (ii == "Non-SST or Thornyhead") {
+    sub <- catch %>% filter(year %in% map_yrs)
+  } else if (ii == "Non-SST") {
     sub <- catch %>% 
-      filter(species_name != "thornyhead" & year == YEAR) 
-  } else if (ii == "Thornyheads") {
+      filter(species_name != "SST" & year %in% map_yrs) 
+  } else if (ii == "SST") {
     sub <- catch %>% 
-      filter(species_name == "thornyhead" & year == YEAR) 
+      filter(species_name == "SST" & year %in% map_yrs) 
   }
     
   sub <- sub %>% 
@@ -588,8 +635,16 @@ for(i in 1:length(maps)) {
     summarize(catch = sum(tons)) %>% 
     rename(REP_AREA = nmfs_area)
 
+  # Labels
+  label <- ifelse(ii == "All Other Rockfish",
+                  "allorox", ifelse(ii == "SST", 
+                                    "SST", "non-SST"))
+  
+  yr_labs <- ifelse(length(map_yrs) > 1, paste0(min(map_yrs), "_", max(map_yrs)),
+                    YEAR)
+  
   # join catch data to nmfs area shape files for mapping
-  map_dat <- plyr::join(shp_nmfs, sub, by = c("REP_AREA"))
+  map_dat <- plyr::join(nmfs_areas, sub, by = c("REP_AREA"))
   
   ggplot() +
     #Land shapefile
@@ -606,21 +661,17 @@ for(i in 1:length(maps)) {
                          na.value = "white", guide = "colourbar", trans = "reverse", direction = -1) +# 
     xlim(c(-2540689, 500000)) +
     theme_void() +
-    ggtitle(paste0(ii)) +
+    ggtitle(paste0(ii, "\n", yr_labs)) +
     theme(plot.title = element_text(hjust = 0.5))
   
-  label <- ifelse(ii == "All Other Rockfish",
-                  "allorox", ifelse(ii == "Non-SST or Thornyhead", 
-                                    "nonthorny", "thorny"))
-  
-  ggsave(paste0(out_path, "/map_", label, "_", YEAR, ".png"), 
+  ggsave(paste0(out_path, "/map_", label, "_", yr_labs, ".png"), 
          dpi=300, height=5, width=7.5, units="in")
   
 }
 
 # By NMFS reporting area 
 catch %>% 
-  mutate(complex = ifelse(species_name == "SST", "SST", "nonSST")) %>% 
+  mutate(complex = ifelse(species_name == "SST", "SST", "non-SST")) %>% 
   group_by(year, nmfs_area, complex) %>% 
   mutate(catch = sum(tons)) %>% 
   distinct(year, complex, nmfs_area, catch) %>%  #, tot_catch)
@@ -648,12 +699,12 @@ catch %>%
 ggsave(paste0(out_path, "/catch_complexXnmfsarea_", YEAR, ".png"), 
        dpi=300, height=3, width=14, units="in")
 
-# Plot -----
+# Biomass plots -----
   
 # Region-specific biomass
 
 # Flag for zero observations
-biom <- biom %>% mutate(zero_obs = ifelse(biomass == 0, TRUE, FALSE))
+biom <- data_sst_nonSST %>% mutate(zero_obs = ifelse(biomass == 0, TRUE, FALSE))
 
 ggplot() +
   geom_point(data = biom, aes(x = year, y = biomass, col = zero_obs)) +
@@ -705,7 +756,7 @@ ggsave(paste0(out_path, "/biomass_total_", YEAR, ".png"),
 specs %>%
   select(species, FMP, ABC = FMP_ABC, OFL = FMP_OFL) %>%
   left_join(catch %>%
-  mutate(species = ifelse(species_name == "SST", "SST", "nonSST")) %>%
+  mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
   group_by(year, FMP = fmp_subarea, species) %>%
   summarize(Catch = sum(tons))) %>% 
   pivot_longer(cols = c("ABC", "OFL", "Catch")) %>% 
@@ -729,7 +780,7 @@ ggsave(paste0(out_path, "/catch_abc_ofl_fmp_", YEAR, ".png"),
 specs %>%
   select(species, ABC, OFL) %>%
   left_join(catch %>%
-              mutate(species = ifelse(species_name == "SST", "SST", "nonSST")) %>%
+              mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
               group_by(year, species) %>%
               summarize(Catch = sum(tons))) %>% 
   pivot_longer(cols = c("ABC", "OFL", "Catch")) %>% 
@@ -752,7 +803,7 @@ ggsave(paste0(out_path, "/catch_abc_ofl_complex_", YEAR, ".png"),
 # Percent SST catch over time:
 
 catch %>%
-  mutate(species = ifelse(species_name == "SST", "SST", "nonSST")) %>%
+  mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
   group_by(year, species) %>%
   summarize(Catch = sum(tons)) %>%
   group_by(year) %>% 
@@ -775,6 +826,7 @@ re_total %>%
   mutate(mean_percent = mean(percent),
          min_percent = min(percent),
          max_percent = max(percent))
+
 # Total Catch/ABC/OFL
 
 specs %>%

@@ -31,7 +31,7 @@ run_re_model <- function(data) {
   # model runs (remove areas where species are not sampled, e.g. SST in EBS_SHELF)
   model_lkup <- input_biom %>% 
     filter(value == "mu") %>% 
-    pivot_longer(cols = unique(biom$region), names_to = "area", values_to = "biomass") %>% 
+    pivot_longer(cols = unique(data$region), names_to = "area", values_to = "biomass") %>% 
     group_by(species, area) %>% 
     summarize(tot_biom = sum(biomass)) %>% 
     ungroup() %>% 
@@ -147,8 +147,8 @@ run_re_model <- function(data) {
   
   print(diagnostics)
   
+  setwd(root)
+  
   out <- list(re_output = re_output, area_sd = area_sd, diagnostics = diagnostics)
   return(out)
-  
-  setwd(root)
 }
