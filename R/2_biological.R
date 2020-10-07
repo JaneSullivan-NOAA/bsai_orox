@@ -1,6 +1,7 @@
 # Biological data (length comps) for SST and Duskies
 # Contact: jane.sullivan@noaa.gov
-# Last updated: Sep 2020
+# Last updated: Oct 2020
+
 # devtools::session_info()
 # version  R version 4.0.2 (2020-06-22)
 # os       Windows 10 x64              

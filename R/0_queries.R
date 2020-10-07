@@ -1,11 +1,15 @@
 # Queries for BSAI OROX
 # Contact: jane.sullivan@noaa.gov
-# Last updated: Sep 2020
+# Last updated: Oct 2020
+
 # devtools::session_info()
 # version  R version 4.0.2 (2020-06-22)
 # os       Windows 10 x64              
 # system   x86_64, mingw32             
 # ui       RStudio 
+
+# Note: also includes analysis using observer data to partition thornyhead catch
+# to shortspine (SST) and other thornyhead
 
 # Set up ----
 
@@ -256,18 +260,6 @@ catch <- sqlQuery(channel_akfin, sprintf(query, codes_string2)) %>%
 
 catch %>% write_csv(paste0(raw_path, "/bsai_orox_catch_raw_2003_", YEAR+1, "_confidential.csv"))
 
-catch_clean <- catch %>% 
-  mutate(species = str_replace(species_name, "rockfish, ", ""),
-         species = str_replace(species, fixed(" (red snapper)"), ""),
-         species = str_replace(species, fixed(" (idiots)"), "")) %>% 
-  select(year, date = catch_activity_date, fmp = fmp_area, fmp_subarea,
-         nmfs_area = reporting_area_code, gear = agency_gear_code,
-         retained_or_discarded, target = trip_target_name, 
-         species_code = agency_species_code, species_group = species_group_name,
-         species_name = species, tons = weight_posted)
-
-catch_clean %>% write_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR+1, "_confidential.csv"))
-
 # Proportion SST ----
 
 # Fishery catch is only reported as "thornyhead", so use observer data to
@@ -293,12 +285,58 @@ query <- "select    a.year, a.species, a.species_name, a.sample_number, a.sample
 observed <- sqlQuery(channel_afsc, sprintf(query, thorny_string)) %>% 
   rename_all(tolower) 
 
-observed %>% write_csv(paste0(raw_path, "/obs_thornyheads_2003_", YEAR+1, ".csv"))
+observed %>% write_csv(paste0(raw_path, "/obs_thornyheads_2003_", YEAR+1, "_confidential.csv"))
+
+# Get catch by SST ----
+
+catch_clean <- catch %>% 
+  mutate(species = str_replace(species_name, "rockfish, ", ""),
+         species = str_replace(species, fixed(" (red snapper)"), ""),
+         species = str_replace(species, fixed(" (idiots)"), ""),
+         # Re-level Bering Sea so it's consistent with SAFE terminology
+         fmp_subarea = ifelse(fmp_subarea == "BS", "EBS", fmp_subarea)) %>% 
+  select(year, date = catch_activity_date, fmp = fmp_area, fmp_subarea,
+         nmfs_area = reporting_area_code, gear = agency_gear_code,
+         retained_or_discarded, target = trip_target_name, 
+         species_code = agency_species_code, species_group = species_group_name,
+         species_name = species, tons = weight_posted)
+
+# proportion of SSTs in thornyhead catch using observer data
+prop_sst <- observed %>% 
+  mutate(thorny = ifelse(species == 350, "shortspine thornyhead", "other thornyhead"),
+         fmp_subarea = ifelse(between(nmfs_area, 500, 540), "EBS", "AI")) %>% 
+  group_by(year, fmp_subarea, thorny) %>% 
+  summarize(w = sum(extrapolated_weight)) %>% 
+  group_by(year, fmp_subarea) %>% 
+  mutate(W = sum(w)) %>% 
+  ungroup() %>% 
+  mutate(prop_sst = w / W) %>% 
+  filter(thorny == "shortspine thornyhead") %>% 
+  select(year, fmp_subarea, prop_sst)
+
+# create new species_names for SST and other thornyheads
+catch_clean <- catch_clean %>% 
+  filter(species_name == "thornyhead") %>%
+  left_join(prop_sst) %>% 
+  mutate(tons = tons * prop_sst,
+         species_name = "SST") %>% 
+  bind_rows(catch_clean %>% 
+              filter(species_name == "thornyhead") %>%
+              left_join(prop_sst) %>% 
+              mutate(tons = tons * (1 - prop_sst),
+                     species_name = "other thornyheads")) %>% 
+  select(- prop_sst) %>% 
+  bind_rows(catch_clean %>% 
+              filter(species_name != "thornyhead")) 
+
+catch_clean %>% write_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR+1, "_confidential.csv"))
 
 observed %>% 
-  mutate(thorny = ifelse(species == 350, "shortspine thornyhead", "other thornyhead"),
+  mutate(thorny = ifelse(species == 350, "SST", "other thornyhead"),
          fmp_subarea = ifelse(between(nmfs_area, 500, 540), "BS", "AI")) %>% 
-  write_csv(paste0(dat_path, "/obs_thornyheads_2003_", YEAR+1, ".csv"))
+  write_csv(paste0(dat_path, "/obs_thornyheads_2003_", YEAR+1, "_confidential.csv"))
+
+prop_sst %>% write_csv(paste0(dat_path, "/prop_sst_catch_2003_", YEAR+1, ".csv"))
 
 # observed %>% filter(species == 350) %>% count(year, haul_join) %>% group_by(year) %>% summarize(tst = length(which(n >= 3)))
 # observed %>% filter(species == 350) %>% count(haul_join) %>% filter(n > 10)
