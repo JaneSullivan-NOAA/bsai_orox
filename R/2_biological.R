@@ -29,25 +29,30 @@ spp <- read_csv(paste0("data/bsai_orox_spp_lookup.csv"))
 # Get length comps ----
 
 comps <- lengths %>% 
-  group_by(source, species_code, year, length) %>% 
+  group_by(source, fmp_subarea, species_code, year, length) %>% 
   summarize(n = sum(frequency)) %>% 
   mutate(prop = n / sum(n)) %>% 
   left_join(spp %>% select(species_code, common_name)) %>% 
-  group_by(source, species_code, year) %>% 
+  group_by(source, fmp_subarea, species_code, year) %>% 
   mutate(N = paste0("N = ", sum(n)))
 
 # Comp test: should all be 1!
-comps %>% group_by(source, species_code, year) %>% summarize(tst = sum(prop)) %>% pull(tst) 
+comps %>% group_by(source, fmp_subarea, species_code, year) %>% summarize(tst = sum(prop)) %>% pull(tst) 
+
+comps <- comps %>% 
+  mutate(source = paste0(fmp_subarea, " ", source))
 
 # Plot dusky ----
 
 ggplot(data = comps %>% 
-         filter(year >= 2002 & species_code == 30152 & between(length, 20, 50)), 
+         filter(year >= 2002 & species_code == 30152 & between(length, 20, 50) & 
+                  source %in% c("AI fishery", "AI survey")) %>% 
+         mutate(source = factor(source, levels = c("AI survey", "AI fishery"))), 
        aes(x = length, y = factor(year), height = prop, fill = source)) +
   geom_density_ridges(stat = "identity", col = "lightgrey", alpha = 0.5, 
                       panel_scaling = TRUE, size = 0.5) +
   # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
-  scale_fill_manual(values = c("grey30", "#00BFC4")) + 
+  scale_fill_manual(values = c("grey30", "#00BFC4")) +
   labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Dusky rockfish") +
   theme_light() +
   theme(legend.position = "top")
@@ -58,14 +63,16 @@ ggsave(paste0(out_path, "/lencomps_dusky_", YEAR, ".png"),
 # Plot SST ----
 
 ggplot(data = comps %>% 
-         filter(year >= 2002 & species_code == 30020 & between(length, 10, 70)), 
+         filter(year >= 2002 & species_code == 30020 & between(length, 10, 70)) %>% 
+         filter(source %in% c("AI fishery", "EBS fishery")), 
        aes(x = length, y = factor(year), height = prop, fill = source)) +
   geom_density_ridges(stat = "identity", col = "white", alpha = 0.5, #alpha = 0.8
                       panel_scaling = TRUE, size = 0.5) +
-  scale_fill_manual(values = c("grey30", "#00BFC4")) + 
+  scale_fill_manual(values = c("grey30", "#00BFC4", "#daa520", "#da2055")) +
   # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
   labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Shortspine thornyhead") +
   theme_light() +
+  # facet_wrap(~ fmp_subarea) +
   theme(legend.position = "top",
         strip.background = element_blank())
 

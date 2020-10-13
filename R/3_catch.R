@@ -15,7 +15,7 @@ YEAR <- 2019
 
 # date that catch was queried - important for long-term record keeping, tracking
 # changes to db and tracing discrepancies in catch
-access_date <- "10/05/2020" 
+access_date <- "10/13/2020" 
 
 libs <- c("tidyverse", "R2admb", "viridis")
 if(length(libs[which(libs %in% rownames(installed.packages()) == FALSE )]) > 0) {
@@ -45,6 +45,9 @@ prop_sst <- read_csv(paste0(dat_path, "/prop_sst_catch_2003_", YEAR+1, ".csv"))
 # dataframe)
 load("data/map_ak_land.RData")
 load("data/map_nmfs_areas.RData")
+
+# directed atka catch
+atka <- read_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+1, "_confidential.csv"))
 
 # Catch by FMP ----
 
@@ -539,7 +542,7 @@ catch %>%
   geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
   scale_fill_grey() +
   facet_grid(fmp_subarea ~ complex) +
-  theme_minimal() +
+  theme_bw() +
   theme(panel.grid.major = element_line(colour = "grey95"),
         panel.grid.minor = element_line(colour = "grey95"),
         axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
@@ -549,6 +552,49 @@ catch %>%
 ggsave(paste0(out_path, "/retained_or_discarded_complexXfmp_", YEAR, ".png"), 
        dpi=300, height=6, width=7, units="in")
 
+# Atka in the AI ----
+
+library(scales)
+  
+relate_atka <- atka %>% 
+    mutate(complex = "Atka mackerel") %>% 
+    bind_rows(catch %>% 
+                filter(fmp_subarea == "AI") %>% # & target == "Atka Mackerel") %>% 
+                mutate(complex = ifelse(species_name == "SST", "SST", "non-SST")) %>% 
+                filter(complex == "non-SST")) %>%
+                # filter(species_name == "dusky")) %>% 
+    # filter(nmfs_area %in% c(541, 542, 543)) %>% 
+    filter(nmfs_area %in% c(541)) %>%
+    mutate(nmfs_area2 = as.character(nmfs_area)) %>% 
+    mutate(nmfs_area2 = factor(nmfs_area2,
+                               levels = c("541"),
+                               labels = c("541 (EAI)"))) %>% 
+  group_by(complex, year, nmfs_area2) %>% 
+  summarize(catch = sum(tons)) %>% 
+  complete(year, nmfs_area2, complex, fill = list(catch = 0)) %>% 
+  group_by(complex, nmfs_area2) %>% 
+  mutate(norm_catch = scales::rescale(catch, to = c(-1, 1))) 
+  
+relate_atka %>% 
+  ggplot(aes(x = year, y = norm_catch, colour = complex, lty = complex)) +
+  geom_line() +
+  facet_wrap(~nmfs_area2) +
+  theme_minimal() +
+  labs(x = NULL, y = "Standardized catch by species group", colour = NULL, lty = NULL)
+  
+
+relate_atka %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = c("nmfs_area2", "year"), names_from = "complex", 
+              values_from = "norm_catch") %>% 
+  group_by(nmfs_area2) %>% 
+  summarize(cor(`Atka mackerel`, `non-SST`))
+
+# Export data set for JVB ----
+catch %>% 
+  select(year, date, nmfs_area, target_fishery = `Target fishery`)
+  
+
 # Map catch ----
 
 maps <- c("All Other Rockfish",
@@ -556,8 +602,8 @@ maps <- c("All Other Rockfish",
           "SST")
 
 # Do you want all years or just current year? Toggle manually.
-map_yrs <- YEAR
-# map_yrs <- unique(catch$year)
+# map_yrs <- YEAR
+map_yrs <- unique(catch$year)
 
 for(i in 1:length(maps)) {
   

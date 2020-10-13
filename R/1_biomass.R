@@ -15,7 +15,7 @@ YEAR <- 2019
 
 # date that catch was queried - important for long-term record keeping, tracking
 # changes to db and tracing discrepancies in catch
-access_date <- "10/05/2020" 
+access_date <- "10/13/2020" 
 
 libs <- c("tidyverse", "R2admb", "viridis")
 if(length(libs[which(libs %in% rownames(installed.packages()) == FALSE )]) > 0) {

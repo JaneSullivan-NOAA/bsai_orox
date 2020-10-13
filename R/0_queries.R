@@ -49,6 +49,7 @@ spp <- sqlQuery(channel_akfin, query) %>%
 
 spp %>% filter(grepl("dusky", common_name))
 spp %>% filter(grepl("thornyhead|rockfish", common_name))
+spp %>% filter(grepl("Atka", common_name))
 
 # Seven most common BSAI Orox
 orox <- c("dusky rockfish", "shortspine thornyhead", "redstripe rockfish",
@@ -192,6 +193,7 @@ fsh_len <- fsh_len %>%
   rename_all(tolower) %>% 
   mutate(species_code = ifelse(species_code == 350, 30020, 30152)) %>% 
   left_join(bsai) %>% 
+  mutate(fmp_subarea = ifelse(fmp_subarea == "BS", "EBS", fmp_subarea)) %>% 
   arrange(species_code, year, length) 
 
 # Survey lengths ----
@@ -201,6 +203,7 @@ fsh_len <- fsh_len %>%
 
 # Lengths stored in mm, convert to cm
 
+# AI
 query <- "select   survey, year, stratum, length / 10 as length, species_code, 
                    total as frequency
           from     afsc.race_sizestratumaigoa
@@ -214,14 +217,33 @@ ai_len <- ai_len %>%
   rename_all(tolower) %>% 
   arrange(species_code, year, length)
 
+# EBS slope - there are no length data collected for duskies on the shelf (and
+# no SST)
+query <- "select   survey, year, stratum, length / 10 as length, species_code, 
+                   total as frequency
+          from     afsc.race_sizecomp_ebsslope
+          where    species_code in ('30020','30152')"
+
+ebs_slope_len <- sqlQuery(channel_akfin, query) %>% 
+  write_csv(paste0(raw_path, "/ebs_slope_survey_lengths_sstdusky_raw_", YEAR, ".csv"))
+
+ebs_slope_len <- ebs_slope_len %>% 
+  rename_all(tolower) %>% 
+  arrange(species_code, year, length)
+
 # Write lengths ----
 
 comps <- fsh_len %>% 
-  select(species_code, year, length, frequency) %>% 
-  mutate(source = "BSAI fishery") %>% 
+  select(species_code, year, length, frequency, fmp_subarea) %>% 
+  mutate(source = "fishery") %>% 
   bind_rows(ai_len %>% 
               select(species_code, year, length, frequency) %>% 
-              mutate(source = "AI survey")) %>% 
+              mutate(fmp_subarea = "AI",
+                     source = "survey")) %>% 
+  bind_rows(ebs_slope_len %>% 
+              select(species_code, year, length, frequency) %>% 
+              mutate(fmp_subarea = "EBS",
+                     source = "slope survey")) %>% 
   write_csv(paste0(dat_path, "/lengths_sstdusky_", YEAR, ".csv"))
  
 # Catch ----
@@ -233,7 +255,7 @@ comps <- fsh_len %>%
 # query <- "select   distinct agency_species_code, species_name, species_group_name
 #           from     council.comprehensive_blend_ca
 #           where    species_group_name = 'Other Rockfish'"
-# catch_spp <- sqlQuery(channel_akfin, query)
+catch_spp <- sqlQuery(channel_akfin, query)
 
 # dusky = (154, 172)
 bsai_orox3 <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142, 
@@ -287,6 +309,11 @@ observed <- sqlQuery(channel_afsc, sprintf(query, thorny_string)) %>%
 
 observed %>% write_csv(paste0(raw_path, "/obs_thornyheads_2003_", YEAR+1, "_confidential.csv"))
 
+# observed %>% filter(species == 350) %>% count(year, haul_join) %>% group_by(year) %>% summarize(tst = length(which(n >= 3)))
+# observed %>% filter(species == 350) %>% count(haul_join) %>% filter(n > 10)
+# observed %>% filter(species == 350) %>% count(year, gear_type, haul_join) %>% group_by(year, gear_type) %>% summarize(n_hauljoins_3plusrows = length(which(n >= 3))) #%>% View()
+# observed %>% filter(haul_join == 24213002718000001024)
+
 # Get catch by SST ----
 
 catch_clean <- catch %>% 
@@ -338,10 +365,30 @@ observed %>%
 
 prop_sst %>% write_csv(paste0(dat_path, "/prop_sst_catch_2003_", YEAR+1, ".csv"))
 
-# observed %>% filter(species == 350) %>% count(year, haul_join) %>% group_by(year) %>% summarize(tst = length(which(n >= 3)))
-# observed %>% filter(species == 350) %>% count(haul_join) %>% filter(n > 10)
-# observed %>% filter(species == 350) %>% count(year, gear_type, haul_join) %>% group_by(year, gear_type) %>% summarize(n_hauljoins_3plusrows = length(which(n >= 3))) #%>% View()
-# observed %>% filter(haul_join == 24213002718000001024)
+# Atka mackerel catch ----
+
+query <- "select   *
+          from     council.comprehensive_blend_ca
+          where    reporting_area_code in ('541', '542', '543') and 
+                   agency_species_code in ('193')  and
+                   year >= 2003"
+
+atka <- sqlQuery(channel_akfin, query) %>% 
+  rename_all(tolower) 
+
+atka %>% write_csv(paste0(raw_path, "/atka_ai_catch_raw_2003_", YEAR+1, "_confidential.csv"))
+
+atka_clean <- atka %>% 
+  mutate(species = str_replace(species_name, "greenling, ", "")) %>% 
+  select(year, date = catch_activity_date, fmp = fmp_area, fmp_subarea,
+         nmfs_area = reporting_area_code, gear = agency_gear_code,
+         retained_or_discarded, target = trip_target_name, 
+         species_code = agency_species_code, species_group = species_group_name,
+         species_name = species, tons = weight_posted) %>% 
+  # only include targeted catch
+  filter(target == "Atka Mackerel")
+
+atka_clean %>% write_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+1, "_confidential.csv"))
 
 # # EBS biomass EDA ----
 # 
