@@ -65,6 +65,8 @@ catch <- read_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR+1, "_confident
 
 # SST/non-SST biomass ----
 
+glimpse(full_biom)
+
 # FLAG: This assessment has historically summed variances across species to get
 # the non-SST survey variance. PH and CT have informed me this is not correct,
 # and we need to recalculate survey variance for all non-SST treated as a single
@@ -86,6 +88,121 @@ data_sst_nonSST <- full_biom %>%
   arrange(species, region, year) 
 
 out_sst_nonSST <- run_re_model(data = data_sst_nonSST)
+
+# Species glimpse ----
+
+spp_eda <- full_biom %>% 
+  # filter(common_name != "shortspine thornyhead") %>% 
+  mutate(species = ifelse(species_code == 30020, "SST", "non-SST"),
+         region = ifelse(survey == "AI" & area == "SBS", "SBS",
+                         ifelse(survey == "AI" & grepl("AI", area), "AI",
+                                survey)),
+         fmp_subarea = ifelse(region == "AI", "AI", "EBS")) %>% 
+  select(species, common_name, fmp_subarea, region, year, biomass) %>%
+  mutate(species_name = case_when(common_name == "shortspine thornyhead" ~ "SST",
+                                  common_name %in% c("dusky and dark rockfishes unid.",
+                                                     "dusky rockfish") ~ "dusky",
+                                  common_name %in% c("broadfin thornyhead", "longspine thornyhead") ~ "other thornyheads",
+                                  common_name == "redbanded rockfish" ~ "redbanded",
+                                  common_name == "sharpchin rockfish" ~ "sharpchin",
+                                  common_name == "harlequin rockfish" ~ "harlequin",
+                                  common_name == "yelloweye rockfish" ~ "yelloweye",
+                                  common_name == "yellowmouth rockfish" ~ "yellowmouth",
+                                  common_name == "rockfish unid." ~ "other"),
+         species_name2 = ifelse(species_name %in% c("dusky", "SST", "other thornyheads"),
+                                species_name, "other"))
+
+spp_eda %>% 
+  group_by(species, region, year) %>% 
+  summarize(biomass = sum(biomass)) %>% 
+  ungroup() %>% 
+  complete(species, region, year, fill = list(biomass = 0)) %>% 
+  ggplot(aes(x = year, y = biomass, fill = species)) +
+  geom_bar(stat = "identity", alpha = 0.7, 
+           # position = position_stack(reverse = TRUE),
+           width = 1,
+           colour = "grey") +
+  scale_fill_grey(end = 0.7) +
+  facet_wrap(~region, scales = "free_y") +
+  theme_bw() +
+  scale_y_continuous(labels = scales::comma) +
+  # theme(legend.position = "bottom") +
+  labs(x = NULL, y = "Biomass (t)", fill = "Complex")
+
+ggsave(paste0(out_path, "/srvbiom_complexXregion_", YEAR, ".png"), 
+       dpi=300, height=4, width=7, units="in")
+
+nonsst_eda <- full_biom %>% 
+  filter(common_name != "shortspine thornyhead") %>% 
+  mutate(species = ifelse(species_code == 30020, "SST", "non-SST"),
+         region = ifelse(survey == "AI" & area == "SBS", "SBS",
+                         ifelse(survey == "AI" & grepl("AI", area), "AI",
+                                survey))) %>% 
+  select(species = common_name, region, year, biomass, var) %>%
+  # combine dusky/dark and dusky
+  mutate(species = ifelse(species == "dusky and dark rockfishes unid.",
+                          "dusky rockfish", species)) %>% 
+  # combine broadfin and longspine thornyhead
+  mutate(species = ifelse(species %in% c("broadfin thornyhead", "longspine thornyhead"),
+                          "other thornyhead", species)) %>% 
+  group_by(species, region, year) %>% 
+  summarize(biomass = sum(biomass),
+            var = sum(var)) %>% 
+  ungroup() %>% 
+  complete(species, region, year, fill = list(biomass = 0, var = 0)) %>% 
+  mutate(region = factor(region, levels = c("AI", "EBS_SHELF", "SBS", "EBS_SLOPE"), 
+                         ordered = TRUE))
+
+library(viridis)
+ggplot(data = nonsst_eda, aes(x = year, y = biomass, 
+                              # fill = forcats::fct_rev(species))) +
+                              fill = species)) +
+  geom_bar(stat = "identity", alpha = 0.65, 
+           position = position_stack(reverse = TRUE),
+           # size = 0.1, 
+           width = 1,
+           colour = "grey") +
+  scale_fill_viridis(discrete = TRUE, option = "A") +
+  # scale_fill_grey(start = 1, end = 0) +
+  facet_wrap(~region, scales = "free_y") +
+  # theme_minimal() +
+  theme_bw() +
+  scale_y_continuous(labels = scales::comma) +
+  theme(legend.position = "bottom") +
+  labs(x = NULL, y = "Biomass (t)", fill = "Non-SST species")
+  
+ggsave(paste0(out_path, "/srvbiom_nonSST_spp_", YEAR, ".png"), 
+       dpi=300, height=4, width=7, units="in")
+
+# nonsst_eda <- nonsst_eda %>% 
+#   group_by(region, year) %>% 
+#   mutate(total = sum(biomass),
+#          prop = ifelse(total > 0, biomass / total, 0)) %>% 
+#   ungroup()
+# 
+# nonsst2 <- nonsst_eda %>% 
+#   filter(total > 0) %>% 
+#   mutate(Year = factor(year),
+#          Species = factor(species))
+
+# ggplot(data = nonsst2 %>% 
+#          filter(region %in% c("AI", "SBS")), aes(x = Year, y = prop, fill = Species)) +
+#   geom_bar(stat = "identity", alpha = 0.6, width = 1, colour = "white") +
+#   scale_fill_viridis(discrete = TRUE) +
+#   facet_wrap(~region, scales = "free", ncol = 1) +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+# ggplot(data = nonsst2 %>% 
+#          filter(region %in% c("AI", "SBS")),
+#        aes(y = biomass, x = Year, fill = Species)) +
+#   geom_bar(stat = "identity", position = position_stack(reverse = TRUE),
+#            alpha = 0.6, width = 1, colour = "white") +
+#   scale_fill_viridis(discrete = TRUE) +
+#   facet_wrap(~region, scales = "free", ncol = 1) +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 90, vjust = 0.5),
+#         legend.position = "top")
 
 # Clean RE output ----
 
@@ -115,10 +232,35 @@ No SSTs occur on the EBS Shelf, so this species X region combination is not repo
             file = paste0(out_path, "/biomass_estimates_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = FALSE, eol = "\n", append = TRUE)
 write.table(f_srv_biomass, file = paste0(out_path, "/biomass_estimates_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = TRUE, eol = "\n", append = TRUE)
 
+# Alternative format for report:
+alt <- f_srv_biomass %>% 
+  select(species, region, year, biomass, cv) %>% 
+  mutate(biomass = ifelse(is.na(biomass), "", 
+                          prettyNum(formatC(biomass, format = "f", digits = 0), 
+                                    big.mark = ",")),
+         cv = ifelse(is.na(cv) | round(cv, 2) == 0, "", 
+                     formatC(cv, format = "f", digits = 2)), 
+         biomcv = ifelse((biomass == "" & cv == ""), "",
+                         ifelse((biomass != "" & cv == ""),
+                                biomass,
+                                paste0(biomass, " (", cv, ")")))) %>% 
+  select(-c(biomass, cv)) %>% 
+  pivot_wider(id_cols = c(species, year), names_from = region, values_from = biomcv)
+
+# write.table(c(paste0("\n", "ALTERNATIVE FORMAT: Survey biomass estimates (t) with CV used as inputs to random effects models. Biomass estimates of zero were treated as NAs in the model.
+# No SSTs occur on the EBS Shelf, so this species X region combination is not reported or estimated in subsequent RE models.")), 
+#             file = paste0(out_path, "/biomass_estimates_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = FALSE, eol = "\n", append = TRUE)
+# write.table(alt, file = paste0(out_path, "/biomass_estimates_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = TRUE, eol = "\n", append = TRUE)
+
+# write.csv(alt, paste0(out_path, "/survey_biomass_table.csv"))
+
 # RE output
 re_total <- out_sst_nonSST$re_output %>% filter(region == "TOTAL")
 re_area <- out_sst_nonSST$re_output %>% filter(region != "TOTAL") %>% 
   mutate(region = factor(region, levels = c("AI", "SBS", "EBS_SHELF", "EBS_SLOPE")))
+
+# results text
+re_area %>% filter(year == 2020)
 
 f_rebiom1 <- out_sst_nonSST$re_output %>% 
   arrange(species, region, year)
@@ -268,11 +410,16 @@ biom <- data_sst_nonSST %>% mutate(zero_obs = ifelse(biomass == 0, TRUE, FALSE))
 ggplot() +
   geom_point(data = biom, aes(x = year, y = biomass, col = zero_obs)) +
   geom_errorbar(data = biom, aes(x = year, ymin = lci, ymax = uci, col = zero_obs)) +
-  geom_line(data = re_area, aes(x = year, y = re_est), col = "darkgrey") +
-  geom_ribbon(data = re_area, aes(x = year, ymin = re_lci, ymax = re_uci),
+  geom_line(data = re_area %>% 
+              filter(!(region == "EBS_SLOPE" & year < 2000)), 
+            aes(x = year, y = re_est), col = "darkgrey") +
+  geom_ribbon(data = re_area %>% 
+                filter(!(region == "EBS_SLOPE" & year < 2000)), 
+              aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
   scale_colour_manual(values = c("black", "red")) +
   facet_grid(region ~ species, scales = "free_y") +
+  # facet_grid(species ~ region, scales = "free_y") +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Biomass (t)") +
   theme_bw() +
@@ -281,8 +428,93 @@ ggplot() +
 ggsave(paste0(out_path, "/biomass_areaXspp_", YEAR, ".png"), 
        dpi=300, height=6, width=8, units="in")
 
+# ALT
+
+# SST
+tmp_biom <- biom %>% 
+  mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS"))) %>% 
+  filter(species == "SST")
+
+tmp_re <- re_area %>% 
+  filter(species == "SST") %>% 
+  mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002), 1, 0),
+         re_lci = ifelse(dat_flag == 1, NA, re_lci),
+         re_uci = ifelse(dat_flag == 1, NA, re_uci))
+# filter(!(region == "EBS_SLOPE" & year < 2000))
+
+slope_fix <- data.frame(region = "EBS_SLOPE",
+                        year = 1980:2002,
+                        yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
+  mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
+
+
+ggplot() +
+  geom_point(data = tmp_biom, aes(x = year, y = biomass, col = zero_obs)) +
+  geom_errorbar(data = tmp_biom, 
+                aes(x = year, ymin = lci, ymax = uci, col = zero_obs),
+                width = 0.5) +
+  geom_line(data = tmp_re %>% filter(dat_flag == 0), 
+            aes(x = year, y = re_est), col = "darkgrey") +
+  geom_line(data = slope_fix, aes(x = year, y = yint),
+            col = "grey", lty = 2) +
+  geom_ribbon(data = tmp_re, 
+              aes(x = year, ymin = re_lci, ymax = re_uci),
+              fill = "grey80", alpha = 0.4) +
+  scale_colour_manual(values = c("black", "red")) +
+  facet_wrap(~region, scales = "free_y", ncol = 1) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Biomass (t)") +
+  theme_bw() +
+  expand_limits(y = 0) +
+  theme(legend.position = "none")
+
+ggsave(paste0(out_path, "/biomass_SST_region_", YEAR, ".png"), 
+       dpi=300, height=6, width=6, units="in")
+
+# non-SST
+tmp_biom <- biom %>% 
+  filter(species == "non-SST")
+
+tmp_re <- re_area %>% 
+  filter(species == "non-SST") %>% 
+  mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002), 1, 0),
+         re_lci = ifelse(dat_flag == 1, NA, re_lci),
+         re_uci = ifelse(dat_flag == 1, NA, re_uci))
+  # filter(!(region == "EBS_SLOPE" & year < 2000))
+
+slope_fix <- data.frame(region = "EBS_SLOPE",
+                        year = 1980:2002,
+                        yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
+  mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
+
+ggplot() +
+  geom_point(data = tmp_biom, aes(x = year, y = biomass, col = zero_obs)) +
+  geom_errorbar(data = tmp_biom, 
+                aes(x = year, ymin = lci, ymax = uci, col = zero_obs),
+                width = 0.5) +
+  geom_line(data = tmp_re %>% filter(dat_flag == 0),
+            aes(x = year, y = re_est), 
+            col = "darkgrey") +
+  geom_line(data = slope_fix, aes(x = year, y = yint),
+            col = "darkgrey", lty = 2) +
+  geom_ribbon(data = tmp_re, 
+              aes(x = year, ymin = re_lci, ymax = re_uci),
+              fill = "grey80", alpha = 0.4) +
+  scale_colour_manual(values = c("black", "red")) +
+  facet_wrap(~region, scales = "free_y", ncol = 1) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Biomass (t)") +
+  theme_bw() +
+  expand_limits(y = 0) +
+  theme(legend.position = "none")
+
+ggsave(paste0(out_path, "/biomass_nonSST_region_", YEAR, ".png"), 
+       dpi=300, height=7, width=6, units="in")
+
 # Biomass by FMP
-ggplot(data = fmp_biom %>% filter(year >= 2000)) + #
+ggplot(data = fmp_biom %>% 
+         filter(year >= 2000) %>% 
+         mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) + #
   geom_line(aes(x = year, y = fmp_est), col = "black") +
   geom_ribbon(aes(x = year, ymin = fmp_lci, ymax = fmp_uci),
               fill = "grey80", alpha = 0.4) +
@@ -313,13 +545,14 @@ ggsave(paste0(out_path, "/biomass_total_", YEAR, ".png"),
 # by FMP and species
 
 specs %>%
-  select(species, FMP, ABC = FMP_ABC, OFL = FMP_OFL) %>%
+  select(species, FMP, `ABC*` = FMP_ABC, `OFL*` = FMP_OFL) %>%
   left_join(catch %>%
   mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
   group_by(year, FMP = fmp_subarea, species) %>%
   summarize(Catch = sum(tons))) %>% 
-  pivot_longer(cols = c("ABC", "OFL", "Catch")) %>% 
-  mutate(name = factor(name, levels = c("Catch", "ABC", "OFL"), ordered = TRUE)) %>% 
+  pivot_longer(cols = c("ABC*", "OFL*", "Catch")) %>% 
+  mutate(name = factor(name, levels = c("Catch", "ABC*", "OFL*"), ordered = TRUE),
+         species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE)) %>% View()
   ggplot(aes(x = year, y = value, col = name, lty = name, size = name)) + #
   geom_line() +
   facet_grid(species ~ FMP, scales = "free") +
@@ -414,6 +647,40 @@ specs %>%
 
 ggsave(paste0(out_path, "/total_catch_abc_ofl_", YEAR, ".png"), 
        dpi=300, height=4, width=5, units="in")
+
+# Catch to biomass ratio ----
+
+refs <- data.frame(species = c("non-SST", "SST"),
+                   yint = c(1, NA)) %>% 
+  mutate(species = factor(species, 
+                          levels = c("SST", "non-SST"), 
+                          ordered = TRUE))
+specs %>%
+  select(species, FMP, F_OFL) %>%
+  left_join(catch %>%
+              mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
+              group_by(year, FMP = fmp_subarea, species) %>%
+              summarize(Catch = sum(tons))) %>% 
+  left_join(fmp_biom %>% 
+              select(species, year, FMP, biomass = fmp_est)) %>%
+  mutate(ratio = Catch / biomass,
+         species = factor(species, 
+                          levels = c("SST", "non-SST"), 
+                          ordered = TRUE)) %>% 
+  ggplot(aes(x = year, y = ratio, col = FMP, lty = FMP)) + #
+  geom_line() +
+  facet_wrap(~ species, scales = "free_y") +
+  scale_colour_manual(values = c("grey", "black")) +
+  scale_linetype_manual(values = c(1, 5)) +
+  geom_hline(data = refs, aes(yintercept = yint),
+             col = "red", lty = 3) +
+  labs(x = NULL, y = "Catch/Biomass Ratio", col = NULL, size = NULL, lty = NULL) +
+  theme_bw() +
+  theme(panel.grid.major = element_line(colour = "white"),
+        panel.grid.minor = element_line(colour = "white"))
+
+ggsave(paste0(out_path, "/ratio_catch_biomass_", YEAR, ".png"), 
+       dpi=300, height=3.75, width=6, units="in")
 
 # other ----
 

@@ -28,6 +28,14 @@ spp <- read_csv(paste0("data/bsai_orox_spp_lookup.csv"))
 
 # Get length comps ----
 
+# Just for SSTs combine BSAI fisheries
+lengths <- lengths %>% 
+  filter(species_code == 30020 & source == "fishery") %>% 
+  mutate(fmp_subarea = "BSAI") %>% 
+  bind_rows(lengths %>% 
+              filter(!(species_code == 30020 & source == "fishery"))) #%>% 
+  # distinct(species_code, fmp_subarea, source)
+
 comps <- lengths %>% 
   group_by(source, fmp_subarea, species_code, year, length) %>% 
   summarize(n = sum(frequency)) %>% 
@@ -38,6 +46,8 @@ comps <- lengths %>%
 
 # Comp test: should all be 1!
 comps %>% group_by(source, fmp_subarea, species_code, year) %>% summarize(tst = sum(prop)) %>% pull(tst) 
+comps %>% filter(source == "EBS fishery") %>% 
+  group_by(species_code, year) %>% summarize(tst = sum(prop)) %>% pull(tst) 
 
 comps <- comps %>% 
   mutate(source = paste0(fmp_subarea, " ", source))
@@ -53,7 +63,7 @@ ggplot(data = comps %>%
                       panel_scaling = TRUE, size = 0.5) +
   # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
   scale_fill_manual(values = c("grey30", "#00BFC4")) +
-  labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Dusky rockfish") +
+  labs(x = "Length (cm)", y = NULL, fill = NULL) + #, title = "Dusky rockfish") +
   theme_light() +
   theme(legend.position = "top")
 
@@ -63,14 +73,15 @@ ggsave(paste0(out_path, "/lencomps_dusky_", YEAR, ".png"),
 # Plot SST ----
 
 ggplot(data = comps %>% 
-         filter(year >= 2002 & species_code == 30020 & between(length, 10, 70)) %>% 
-         filter(source %in% c("AI fishery", "EBS fishery")), 
+         filter(year >= 2002 & species_code == 30020 & between(length, 10, 70)) %>% #View() 
+         filter(source %in% c("AI survey", "BSAI fishery")),
+         # filter(source %in% c("AI fishery", "EBS fishery", "AI survey")), #, "EBS slope survey"
        aes(x = length, y = factor(year), height = prop, fill = source)) +
-  geom_density_ridges(stat = "identity", col = "white", alpha = 0.5, #alpha = 0.8
+  geom_density_ridges(stat = "identity", col = "white", alpha = 0.4, #alpha = 0.8
                       panel_scaling = TRUE, size = 0.5) +
   scale_fill_manual(values = c("grey30", "#00BFC4", "#daa520", "#da2055")) +
   # geom_hline(yintercept = factor(2002:YEAR), col = "lightgrey") +
-  labs(x = "Length (cm)", y = NULL, fill = NULL, title = "Shortspine thornyhead") +
+  labs(x = "Length (cm)", y = NULL, fill = NULL) + #, title = "Shortspine thornyhead") +
   theme_light() +
   # facet_wrap(~ fmp_subarea) +
   theme(legend.position = "top",

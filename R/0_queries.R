@@ -255,7 +255,7 @@ comps <- fsh_len %>%
 # query <- "select   distinct agency_species_code, species_name, species_group_name
 #           from     council.comprehensive_blend_ca
 #           where    species_group_name = 'Other Rockfish'"
-catch_spp <- sqlQuery(channel_akfin, query)
+# catch_spp <- sqlQuery(channel_akfin, query)
 
 # dusky = (154, 172)
 bsai_orox3 <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142, 
@@ -451,3 +451,5 @@ atka_clean %>% write_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+
 # 
 # ebs_shelf3 %>% filter(year %in% c(1984, 1985))
 # 
+
+#

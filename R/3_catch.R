@@ -49,6 +49,33 @@ load("data/map_nmfs_areas.RData")
 # directed atka catch
 atka <- read_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+1, "_confidential.csv"))
 
+# non-commercial catch - have to pull this from the AKFIN Answers dashboard
+agency_catch <- read_csv(paste0(dat_path, "/Noncommercial_Fishery_Catch_AKFIN_DASH_20201019.csv"))
+
+# Non-commercial catch ----
+
+# the "Other Rockfish" species group is a little outdated.
+
+# bsai_orox <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142, 
+#                 150, 156, 155, 175, 149, 159, 166, 146, 184, 137,
+#                 138, 178, 182, 179)
+
+agency_catch <- agency_catch %>% 
+  select_all(~gsub("\\s+|\\.", "_", .)) %>% 
+  select_all(tolower) %>% 
+  rename(year = collection_year)
+  
+agency_catch %>% #distinct(species_code)
+  # filter(species_code %in% bsai_orox) %>% 
+  group_by(year, agency = collection_agency) %>% 
+  dplyr::summarise(catch = sum(weight) / 1000) %>% 
+  bind_rows(agency_catch %>% 
+              group_by(year) %>% 
+              dplyr::summarise(catch = sum(weight) / 1000) %>% 
+              mutate(agency = "Total (t)")) %>% 
+  ungroup() %>% 
+  pivot_wider(id_cols = year, names_from = agency, values_from = catch)
+
 # Catch by FMP ----
 
 report <- c(paste0("Catch tables for BSAI Other Rockfish", "\n",
@@ -279,11 +306,14 @@ complex_byfishery_fmp <- complex_byfishery %>%
 
 complex_byfishery_fmp %>% 
   complete(year, fmp_subarea, plot_fishery, complex, fill = list(catch = 0)) %>% 
+  mutate(complex = factor(complex, levels = c("SST", "non-SST"), ordered = TRUE)) %>% 
   ggplot(aes(x = year, y = catch, fill = plot_fishery)) +
   geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
   scale_fill_viridis(discrete = TRUE) +
-  facet_grid(fmp_subarea ~ complex) +
-  theme_minimal() +
+  # facet_grid(fmp_subarea ~ complex) +
+  facet_grid(complex ~ fmp_subarea) +
+  theme_bw() +
+  # theme_minimal() +
   theme(panel.grid.major = element_line(colour = "grey95"),
         panel.grid.minor = element_line(colour = "grey95"),
         axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5),
@@ -310,9 +340,10 @@ complex_byfishery_nmfsarea %>%
                              labels = c("543 (WAI)", "542 (CAI)", "541 (EAI)",
                                         "517 (SBS)", "519 (SBS)",  "521 (EBS Slope)"),
                              ordered = TRUE)) %>% 
+  mutate(complex = factor(complex, levels = c("SST", "non-SST"), ordered = TRUE)) %>% 
   ggplot(aes(x = year, y = catch, fill = plot_fishery)) +
   geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
-  scale_fill_viridis(discrete = TRUE) +
+  scale_fill_viridis(discrete = TRUE, option = "D") +
   # scale_fill_grey() +
   facet_grid(complex ~ nmfs_area2) +
   theme_minimal() +
@@ -538,10 +569,11 @@ catch %>%
   distinct(fmp_subarea, complex, year, retained_or_discarded, catch) %>% 
   ungroup() %>% 
   complete(fmp_subarea, complex, year, retained_or_discarded, fill = list(catch = 0)) %>% 
+  mutate(complex = factor(complex, levels = c("SST", "non-SST"), ordered = TRUE)) %>% 
   ggplot(aes(x = year, y = catch, fill = retained_or_discarded)) +
   geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
   scale_fill_grey() +
-  facet_grid(fmp_subarea ~ complex) +
+  facet_grid(complex ~ fmp_subarea) +
   theme_bw() +
   theme(panel.grid.major = element_line(colour = "grey95"),
         panel.grid.minor = element_line(colour = "grey95"),
@@ -597,9 +629,9 @@ catch %>%
 
 # Map catch ----
 
-maps <- c("All Other Rockfish",
-          "Non-SST",
-          "SST")
+maps <- c("All Other Rockfish")#,
+          # "Non-SST",
+          # "SST")
 
 # Do you want all years or just current year? Toggle manually.
 # map_yrs <- YEAR
@@ -643,11 +675,11 @@ for(i in 1:length(maps)) {
     #NMFS Reporting Areas shapefile (credit: Steve.Lewis@noaa.gov)
     geom_polygon(data = map_dat,
                  aes(long, lat, group = group, fill = catch),
-                 color = "grey60") +
+                 color = "grey60", alpha = 0.8) +
     coord_equal() +
     geom_text(data = nmfs_areas, aes(coords.x1, coords.x2, label = REP_AREA),
               check_overlap = TRUE, size=3, nudge_y=35000, fontface = "bold") +
-    scale_fill_distiller(name="Catch (t)", palette = "YlGnBu", 
+    scale_fill_distiller(name="Catch (t)", palette = "Greys", #palette = "YlGnBu", 
                          na.value = "white", guide = "colourbar", trans = "reverse", direction = -1) +# 
     xlim(c(-2540689, 500000)) +
     theme_void() +
