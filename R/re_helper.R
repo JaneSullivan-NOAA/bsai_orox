@@ -13,7 +13,7 @@ run_re_model <- function(data) {
   
   # expand to include all years, species, regions for input to RE model
   input_biom <- data %>% 
-    expand(year = min(data$year):(YEAR+1), species, region) %>% 
+    expand(year = min(data$year):YEAR, species, region) %>% 
     left_join(data)
   
   input_biom <- input_biom %>% 

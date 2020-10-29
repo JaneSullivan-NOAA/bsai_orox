@@ -14,7 +14,7 @@
 # Set up ----
 
 # Assessment year (most recent year with complete data set)
-YEAR <- 2019
+YEAR <- 2020
 
 libs <- c("tidyverse", "RODBC")
 if(length(libs[which(libs %in% rownames(installed.packages()) == FALSE )]) > 0) {
@@ -184,10 +184,10 @@ query <- paste0("select   year, nmfs_area, gear, species as species_code,
                  from     norpac.debriefed_length
                  where    species in ('350', '330') and
                           nmfs_area in (%s) and
-                          year between 2002 and ", YEAR) 
+                          year between 2002 and ", YEAR-1) 
 
 fsh_len <- sqlQuery(channel_akfin, sprintf(query, bsai_lkup)) %>% 
-  write_csv(paste0(raw_path, "/bsai_fishery_lengths_sstdusky_raw_", YEAR, ".csv"))
+  write_csv(paste0(raw_path, "/bsai_fishery_lengths_sstdusky_raw_", YEAR-1, ".csv"))
 
 fsh_len <- fsh_len %>% 
   rename_all(tolower) %>% 

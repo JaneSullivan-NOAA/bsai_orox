@@ -1,4 +1,4 @@
-# Survey and random effects model biomass estimates
+# Survey and random effects model  %>% ass estimates
 # Contact: jane.sullivan@noaa.gov
 # Last updated: Oct 2020
 
@@ -11,7 +11,7 @@
 # Set up ----
 
 # Assessment year (most recent year with complete data set)
-YEAR <- 2019
+YEAR <- 2020
 
 # date that catch was queried - important for long-term record keeping, tracking
 # changes to db and tracing discrepancies in catch
@@ -57,11 +57,15 @@ if(!file.exists("RE.exe")) {
 
 setwd(root)
 
-# survey biomass
-full_biom <- read_csv(paste0(dat_path, "/bsai_orox_biomass_", YEAR, ".csv"))
+# survey biomass: based on guidance from W Palsson 10/28/20 use EBS shelf
+# (1982-present) and AI (1991-present) and the EBS slope which starts in 2002
+full_biom <- read_csv(paste0(dat_path, "/bsai_orox_biomass_", YEAR, ".csv")) %>% 
+  # year US trawl surveys were standardized (except for slope survey, which
+  # began in 2002)
+  filter(!(survey == "AI" & year < 1991))
 
 # catch data for assessing overfishing status
-catch <- read_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR+1, "_confidential.csv"))
+catch <- read_csv(paste0(dat_path, "/bsai_orox_catch_2003_", YEAR, "_confidential.csv"))
 
 # SST/non-SST biomass ----
 
@@ -172,7 +176,7 @@ ggplot(data = nonsst_eda, aes(x = year, y = biomass,
   labs(x = NULL, y = "Biomass (t)", fill = "Non-SST species")
   
 ggsave(paste0(out_path, "/srvbiom_nonSST_spp_", YEAR, ".png"), 
-       dpi=300, height=4, width=7, units="in")
+       dpi=400, height=4, width=7, units="in")
 
 # nonsst_eda <- nonsst_eda %>% 
 #   group_by(region, year) %>% 
@@ -260,7 +264,8 @@ re_area <- out_sst_nonSST$re_output %>% filter(region != "TOTAL") %>%
   mutate(region = factor(region, levels = c("AI", "SBS", "EBS_SHELF", "EBS_SLOPE")))
 
 # results text
-re_area %>% filter(year == 2020)
+re_area %>% filter(year == YEAR)
+re_total %>% filter(year == YEAR)
 
 f_rebiom1 <- out_sst_nonSST$re_output %>% 
   arrange(species, region, year)
@@ -395,11 +400,32 @@ specs_clean <- specs_clean %>%
 
 write_csv(specs_clean, paste0(out_path, "/specs_table_", YEAR, ".csv"))
 
+specs_clean %>% filter(Variable == "Biomass")
+re_total %>% filter(year == YEAR) # check, should match
 specs_clean %>% filter(Variable == "OFL")
 specs_clean %>% filter(Variable == "ABC")
 specs_clean %>% filter(Variable == "AI ABC")
 specs_clean %>% filter(Variable == "EBS ABC")
+fmp_biom %>% 
+  filter(year == YEAR) %>% 
+  select(-c(fmp_sd, fmp_lci, fmp_uci), biom = fmp_est) %>% 
+  group_by(species) %>% 
+  mutate(biom_spp_sum = sum(biom)) %>% 
+  group_by(FMP) %>% 
+  mutate(biom_fmp_sum = sum(biom)) %>% 
+  ungroup() %>% 
+  mutate(prop_by_fmp = biom / biom_spp_sum)
 
+# Theoretical FMP OFLs for total Other Rockfish
+specs %>% 
+  group_by(FMP) %>% 
+  summarize(sum(FMP_OFL))
+#Check that this adds up to total BSAI OFL
+specs %>% 
+  group_by(FMP) %>% 
+  summarize(FMP_OFL = sum(FMP_OFL)) %>% 
+  ungroup() %>% 
+  summarize(OFL = sum(FMP_OFL))
 # Biomass plots -----
   
 # Region-specific biomass
@@ -437,26 +463,28 @@ tmp_biom <- biom %>%
 
 tmp_re <- re_area %>% 
   filter(species == "SST") %>% 
-  mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002), 1, 0),
-         re_lci = ifelse(dat_flag == 1, NA, re_lci),
-         re_uci = ifelse(dat_flag == 1, NA, re_uci))
+  filter(!(region == "EBS_SLOPE" & year < 2000) & 
+           !(region %in% c("AI", "SBS") & year < 1991))
+  # mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002) &
+  #                            (region == "AI" & year < 1991), 1, 0),
+  #        re_lci = ifelse(dat_flag == 1, NA, re_lci),
+  #        re_uci = ifelse(dat_flag == 1, NA, re_uci))
 # filter(!(region == "EBS_SLOPE" & year < 2000))
 
-slope_fix <- data.frame(region = "EBS_SLOPE",
-                        year = 1980:2002,
-                        yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
-  mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
-
+# slope_fix <- data.frame(region = "EBS_SLOPE",
+#                         year = min(full_biom$year):2002,
+#                         yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
+#   mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
 
 ggplot() +
   geom_point(data = tmp_biom, aes(x = year, y = biomass, col = zero_obs)) +
   geom_errorbar(data = tmp_biom, 
                 aes(x = year, ymin = lci, ymax = uci, col = zero_obs),
                 width = 0.5) +
-  geom_line(data = tmp_re %>% filter(dat_flag == 0), 
+  geom_line(data = tmp_re, # %>% filter(dat_flag == 0), 
             aes(x = year, y = re_est), col = "darkgrey") +
-  geom_line(data = slope_fix, aes(x = year, y = yint),
-            col = "grey", lty = 2) +
+  # geom_line(data = slope_fix, aes(x = year, y = yint),
+  #           col = "grey", lty = 2) +
   geom_ribbon(data = tmp_re, 
               aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
@@ -477,26 +505,28 @@ tmp_biom <- biom %>%
 
 tmp_re <- re_area %>% 
   filter(species == "non-SST") %>% 
-  mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002), 1, 0),
-         re_lci = ifelse(dat_flag == 1, NA, re_lci),
-         re_uci = ifelse(dat_flag == 1, NA, re_uci))
+  filter(!(region == "EBS_SLOPE" & year < 2000) & 
+           !(region %in% c("AI", "SBS") & year < 1991))
+  # mutate(dat_flag = ifelse((region == "EBS_SLOPE" & year < 2002), 1, 0),
+  #        re_lci = ifelse(dat_flag == 1, NA, re_lci),
+  #        re_uci = ifelse(dat_flag == 1, NA, re_uci))
   # filter(!(region == "EBS_SLOPE" & year < 2000))
 
-slope_fix <- data.frame(region = "EBS_SLOPE",
-                        year = 1980:2002,
-                        yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
-  mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
+# slope_fix <- data.frame(region = "EBS_SLOPE",
+#                         year = min(full_biom$year):2002,
+#                         yint = tmp_re %>% filter(dat_flag == 1) %>% distinct(re_est) %>% pull()) %>% 
+#   mutate(region = factor(region, levels = c("EBS_SLOPE", "AI", "SBS")))
 
 ggplot() +
   geom_point(data = tmp_biom, aes(x = year, y = biomass, col = zero_obs)) +
   geom_errorbar(data = tmp_biom, 
                 aes(x = year, ymin = lci, ymax = uci, col = zero_obs),
                 width = 0.5) +
-  geom_line(data = tmp_re %>% filter(dat_flag == 0),
+  geom_line(data = tmp_re, # %>% filter(dat_flag == 0),
             aes(x = year, y = re_est), 
             col = "darkgrey") +
-  geom_line(data = slope_fix, aes(x = year, y = yint),
-            col = "darkgrey", lty = 2) +
+  # geom_line(data = slope_fix, aes(x = year, y = yint),
+  #           col = "darkgrey", lty = 2) +
   geom_ribbon(data = tmp_re, 
               aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
@@ -513,7 +543,7 @@ ggsave(paste0(out_path, "/biomass_nonSST_region_", YEAR, ".png"),
 
 # Biomass by FMP
 ggplot(data = fmp_biom %>% 
-         filter(year >= 2000) %>% 
+         filter(year >= 2002) %>% 
          mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) + #
   geom_line(aes(x = year, y = fmp_est), col = "black") +
   geom_ribbon(aes(x = year, ymin = fmp_lci, ymax = fmp_uci),
@@ -528,7 +558,7 @@ ggsave(paste0(out_path, "/biomass_fmp_", YEAR, ".png"),
        dpi=300, height=5, width=7, units="in")
 
 # Total biomass
-ggplot(data = re_total %>% filter(year >= 2000)) +
+ggplot(data = re_total %>% filter(year >= 2002)) +
   geom_line(aes(x = year, y = re_est), col = "black") +
   geom_ribbon(aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
@@ -552,7 +582,7 @@ specs %>%
   summarize(Catch = sum(tons))) %>% 
   pivot_longer(cols = c("ABC*", "OFL*", "Catch")) %>% 
   mutate(name = factor(name, levels = c("Catch", "ABC*", "OFL*"), ordered = TRUE),
-         species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE)) %>% View()
+         species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE)) %>% #View()
   ggplot(aes(x = year, y = value, col = name, lty = name, size = name)) + #
   geom_line() +
   facet_grid(species ~ FMP, scales = "free") +
@@ -655,7 +685,7 @@ refs <- data.frame(species = c("non-SST", "SST"),
   mutate(species = factor(species, 
                           levels = c("SST", "non-SST"), 
                           ordered = TRUE))
-specs %>%
+ratio <- specs %>%
   select(species, FMP, F_OFL) %>%
   left_join(catch %>%
               mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
@@ -666,7 +696,8 @@ specs %>%
   mutate(ratio = Catch / biomass,
          species = factor(species, 
                           levels = c("SST", "non-SST"), 
-                          ordered = TRUE)) %>% 
+                          ordered = TRUE)) 
+ratio %>% 
   ggplot(aes(x = year, y = ratio, col = FMP, lty = FMP)) + #
   geom_line() +
   facet_wrap(~ species, scales = "free_y") +
@@ -682,6 +713,9 @@ specs %>%
 ggsave(paste0(out_path, "/ratio_catch_biomass_", YEAR, ".png"), 
        dpi=300, height=3.75, width=6, units="in")
 
+ratio %>% 
+  group_by(FMP, species) %>% 
+  summarize(mean_ratio = mean(ratio))
 # other ----
 
 # other ways the complex has been split up...
