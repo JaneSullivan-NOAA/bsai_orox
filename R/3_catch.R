@@ -28,7 +28,7 @@ options(scipen = 999)
 
 root <- getwd()
 dat_path <- paste0("data/", YEAR) # directory where source data is contained
-out_path <- paste0("results/", YEAR) # directory for results/output
+out_path <- paste0("results/", YEAR+1) # directory for results/output
 dir.create(out_path)
 
 # Data ----
@@ -169,6 +169,9 @@ write.table(f_catch_spp, file = paste0(out_path, "/catch_tables_", YEAR, ".csv")
 
 catch %>% 
   mutate(complex = ifelse(species_name == "SST", "SST", "non-SST")) %>% 
+  mutate(complex = factor(complex, 
+                   levels = c("SST", "non-SST"), 
+                   ordered = TRUE)) %>% 
   group_by(year, nmfs_area, complex) %>% 
   mutate(catch = sum(tons)) %>% 
   distinct(year, complex, nmfs_area, catch) %>% 
@@ -184,7 +187,9 @@ catch %>%
                              ordered = TRUE)) %>% 
   ggplot(aes(x = year, y = catch, fill = complex)) +
   geom_area(alpha = 0.6 , size = 0.5, colour = "white") +
-  scale_fill_grey() +
+  # scale_fill_grey() +
+  scale_fill_manual(values = c("#6ba292", "#f0b74a")) +
+  theme_minimal(base_size = 14) +
   facet_wrap(~ nmfs_area2, ncol = 6) +
   theme_minimal() +
   theme(panel.grid.major = element_line(colour = "grey95"),
@@ -194,7 +199,7 @@ catch %>%
   labs(x = NULL, y = "Catch (t)", fill = "Complex")
 
 ggsave(paste0(out_path, "/catch_complexXnmfsarea_", YEAR, ".png"), 
-       dpi=300, height=3, width=14, units="in")
+       dpi=300, height=3, width=12, units="in")
 
 # By area, complex, and species ----
 
@@ -690,3 +695,77 @@ for(i in 1:length(maps)) {
          dpi=300, height=5, width=7.5, units="in")
   
 }
+
+# detailed map ----
+library(rgdal)
+# sp_data <- readOGR(dsn = "data/shapefiles",layer = "P3_AK_All")
+# sp_data <- readOGR(dsn = "data/shapefiles",layer = "NMFS_Zones_Clean")
+sp_data <- readOGR(dsn = "data/shapefiles",layer = "gf95_nmfs_polygon")
+
+dusky <- read_csv(paste0(raw_path, "/obs_dusky_2003_", YEAR, "_confidential.csv"))
+names(dusky)
+
+dusky_sm <- dusky %>% 
+  filter(year %in% c(2015:2020)) %>% 
+  # filter(nmfs_area %in% c(541, 542, 543, 610)) %>% 
+  mutate(fmp = ifelse(nmfs_area > 600, 2, 4)) %>% 
+  select(lon = londd_start, lat = latdd_start, haul_join, catch = extrapolated_weight, year, haul_join, nmfs_area, fmp) %>% 
+  filter(!(is.na(lon) | is.na(lat)))
+
+dusky_sm$lon = ifelse(dusky_sm$lon > 0, dusky_sm$lon - 360, dusky_sm$lon)
+
+dusky_coords <- SpatialPointsDataFrame(coords = dusky_sm[, c(1, 2)],
+                                       data = dusky_sm,
+                                       proj4string = CRS("+proj=longlat"))
+dusky_coords <- spTransform(dusky_coords, CRS(proj4string(sp_data)))
+
+plot(sp_data, xlim = c(-2750000,-250000), ylim = c(0,2000000))
+points(dusky_coords[ , c(1, 2)], pch=21, cex = dusky_coords$catch/2000, col = dusky_sm$fmp)
+
+newproj <- "+proj=longlat +ellps=WGS84 +no_defs" # +no_defs" #CRS(proj4string(sp_data))
+library(raster)
+r1 <- marmap::as.raster(aleu)
+r2 <- raster::projectRaster(r1, newproj)
+aleu_proj <- as.bathy(r2)
+
+title(main = paste0(unique(dusky_sm$year)))
+
+# bathy -----
+
+aleu <- getNOAA.bathy(170, -158, 50, 70, 
+                      resolution = 10,
+                      antimeridian = TRUE)
+
+blues <- c("lightsteelblue4", "lightsteelblue3",
+           "lightsteelblue2", "lightsteelblue1")
+
+plot(aleu, image = TRUE, 
+     # bpal = list(c(0,max(aleu),"lightgrey"),
+     #             c(min(aleu),0,"#1f66e5","#dfe9fb")),
+     # bpal = blues(100),
+     bpal = list(c(0, max(aleu), "grey"),
+                 c(min(aleu),0,blues)),
+     land = T, lwd = 0.1, 
+     col = c("lightgrey", "grey", "darkgrey", "grey", "lightgrey", "grey", "darkgrey", "grey", "lightgrey", "grey", "darkgrey", "grey", "lightgrey"),
+     axes = FALSE)
+# antimeridian.box(aleutians, 10)
+
+dusky_sm <- dusky %>% 
+  dplyr::filter(year %in% c(2015:2020)) %>% 
+  # filter(nmfs_area %in% c(541, 542, 543, 610)) %>% 
+  mutate(fmp = ifelse(nmfs_area == 610, 4, 6)) %>% 
+  dplyr::select(lon = londd_start, lat = latdd_start, haul_join, catch = extrapolated_weight, year, haul_join, nmfs_area, fmp) %>% 
+  filter(!(is.na(lon) | is.na(lat)))
+
+dusky_sm$lon = ifelse(dusky_sm$lon < 0, dusky_sm$lon + 360, dusky_sm$lon)
+
+points(dusky_sm[ , c(1, 2)], pch=21,
+       cex = dusky_sm$catch/2500, 
+       col = dusky_sm$fmp)
+
+plot(sp_data)
+nmfs <- fortify(sp_data)
+summary(nmfs)
+nmfs$long <- nmfs$long/1000
+nmfs$lat <- nmfs$lat/1000
+plot(aleutians, add = TRUE)

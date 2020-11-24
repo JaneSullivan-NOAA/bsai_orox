@@ -452,4 +452,22 @@ atka_clean %>% write_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+
 # ebs_shelf3 %>% filter(year %in% c(1984, 1985))
 # 
 
-#
+# Dusky bycatch ----
+query <- "select    a.year, a.species, a.species_name,
+                    a.extrapolated_weight, b.gear_type, b.latdd_start, b.londd_start,
+                    b.nmfs_area, a.haul_join
+                    
+          from      obsint.debriefed_spcomp a
+          
+          join      obsint.debriefed_haul b on a.haul_join = b.haul_join
+          
+          where     a.species in ('355', '330') and 
+                    a.year >= 2003 and
+                    b.nmfs_area in ('530','550','523','518','517',
+                                    '513','509','516','512','508','514','524',
+                                    '543','543', '542', '541', '610')"
+
+dusky <- sqlQuery(channel_afsc, query) %>% 
+  rename_all(tolower) 
+
+dusky %>% write_csv(paste0(raw_path, "/obs_dusky_2003_", YEAR, "_confidential.csv"))

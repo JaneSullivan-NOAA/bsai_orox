@@ -1,0 +1,14 @@
+200610021024   1     1     0jbenson       regionclean xx102358 xx102358
+200610021024   0     0     0jbenson     dropfeatures xx102358 region.*
+200610021024   0     0     0jbenson     reselect xx102358 gcj
+200610021024   0     0     0jbenson     labelerrors gcj unlabeled
+200610021024   0     0     0jbenson           createlabels gcj
+200610021024   0     7     0jbenson           build gcj
+200610021519   0     0     0jbenson ARCEDIT D:\WORK\EDIT\GCJ
+200610021524   0     0     0jbenson ARCEDIT D:\WORK\EDIT\GCJ
+200610021537   0     0     0jbenson ARCEDIT D:\WORK\EDIT\GCJ
+200610021540   0     0     0jbenson ARCEDIT D:\WORK\EDIT\GCJ
+200610021540   0     0     0jbenson build gcj arc
+200610021541   0     8     0jbenson build gcj poly
+20061004 906   0     0     0jbenson projectcopy cover U:\alaska\constructs\zones\management\gf95_nmfs cover gcj
+20061012 845   0     0     0jbenson copy gcj U:\alaska\constructs\zones\management\gf95_nmfs

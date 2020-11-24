@@ -1,6 +1,6 @@
 # Survey and random effects model  %>% ass estimates
 # Contact: jane.sullivan@noaa.gov
-# Last updated: Oct 2020
+# Last updated: Nov 2020
 
 # devtools::session_info()
 # version  R version 4.0.2 (2020-06-22)
@@ -157,26 +157,32 @@ nonsst_eda <- full_biom %>%
   mutate(region = factor(region, levels = c("AI", "EBS_SHELF", "SBS", "EBS_SLOPE"), 
                          ordered = TRUE))
 
-library(viridis)
+# library(viridis)
+CUSTOMpalette <- c("#1a2ffa", "#0d177d", "#1a9ffa", "#fa751a", 
+                   "#4b8e12", "#6fd21b", "#fae51a")#, "#c3b104", 
+                   # "#f5df05", "#dcc805")
 ggplot(data = nonsst_eda, aes(x = year, y = biomass, 
                               # fill = forcats::fct_rev(species))) +
                               fill = species)) +
-  geom_bar(stat = "identity", alpha = 0.65, 
+  geom_bar(stat = "identity", alpha = 0.7, 
            position = position_stack(reverse = TRUE),
-           # size = 0.1, 
+           size = 0.3,
            width = 1,
-           colour = "grey") +
-  scale_fill_viridis(discrete = TRUE, option = "A") +
+           colour = "black") +
+  # scale_fill_viridis(discrete = TRUE, option = "D") +
+  scale_fill_manual(values = CUSTOMpalette) +
   # scale_fill_grey(start = 1, end = 0) +
-  facet_wrap(~region, scales = "free_y") +
+  facet_wrap(~region, scales = "free_y", ncol = 1) +
   # theme_minimal() +
   theme_bw() +
   scale_y_continuous(labels = scales::comma) +
   theme(legend.position = "bottom") +
-  labs(x = NULL, y = "Biomass (t)", fill = "Non-SST species")
+  labs(x = NULL, y = "Biomass (t)", fill = "Non-SST species") +
+  guides(fill = guide_legend(nrow = 3))
+
   
 ggsave(paste0(out_path, "/srvbiom_nonSST_spp_", YEAR, ".png"), 
-       dpi=400, height=4, width=7, units="in")
+       dpi=400, height=8, width=6.5, units="in")
 
 # nonsst_eda <- nonsst_eda %>% 
 #   group_by(region, year) %>% 
@@ -492,12 +498,40 @@ ggplot() +
   facet_wrap(~region, scales = "free_y", ncol = 1) +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Biomass (t)") +
-  theme_bw() +
+  theme_bw(base_size = 14) +
   expand_limits(y = 0) +
   theme(legend.position = "none")
 
 ggsave(paste0(out_path, "/biomass_SST_region_", YEAR, ".png"), 
        dpi=300, height=6, width=6, units="in")
+
+# different SST plot for pres
+
+ggplot() +
+  geom_point(data = tmp_biom, 
+             aes(x = year, y = biomass, col = region, fill = region)) +
+  geom_errorbar(data = tmp_biom, 
+                aes(x = year, ymin = lci, ymax = uci, 
+                    col = region, fill = region),
+                width = 0.5) +
+  geom_line(data = tmp_re, 
+            aes(x = year, y = re_est, col = region, fill = region)) +
+  geom_ribbon(data = tmp_re, 
+              aes(x = year, ymin = re_lci, ymax = re_uci, 
+                  col = region, fill = region), 
+              alpha = 0.3, col = "white") +
+  scale_y_continuous(labels = scales::comma) +
+  scale_fill_viridis(discrete = TRUE) +
+  scale_colour_viridis(discrete = TRUE) +
+  labs(x = NULL, y = NULL, col = NULL, fill = NULL,
+       title = "SST biomass (t)") +
+  theme_minimal(base_size = 14) +
+  expand_limits(y = 0) +
+  theme(legend.position = c(0.2, 0.8))
+
+ggsave(paste0(out_path, "/pre_biomass_SST_region_", YEAR, ".png"), 
+       dpi=300, height=4, width=4.5, units="in")
+
 
 # non-SST
 tmp_biom <- biom %>% 
@@ -531,15 +565,15 @@ ggplot() +
               aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
   scale_colour_manual(values = c("black", "red")) +
-  facet_wrap(~region, scales = "free_y", ncol = 1) +
+  facet_wrap(~region, scales = "free_y", ncol = 2) +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Biomass (t)") +
-  theme_bw() +
+  theme_bw(base_size = 14) +
   expand_limits(y = 0) +
   theme(legend.position = "none")
 
 ggsave(paste0(out_path, "/biomass_nonSST_region_", YEAR, ".png"), 
-       dpi=300, height=7, width=6, units="in")
+       dpi=300, height=6, width=8, units="in")
 
 # Biomass by FMP
 ggplot(data = fmp_biom %>% 
@@ -558,17 +592,58 @@ ggsave(paste0(out_path, "/biomass_fmp_", YEAR, ".png"),
        dpi=300, height=5, width=7, units="in")
 
 # Total biomass
-ggplot(data = re_total %>% filter(year >= 2002)) +
+ggplot(data = re_total %>% 
+         filter(year >= 2002) %>% 
+         mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) +
   geom_line(aes(x = year, y = re_est), col = "black") +
   geom_ribbon(aes(x = year, ymin = re_lci, ymax = re_uci),
               fill = "grey80", alpha = 0.4) +
   facet_wrap(~ species) +
   scale_y_continuous(labels = scales::comma) +
-  labs(x = NULL, y = "Biomass (t)") +
-  theme_bw()
+  labs(x = NULL, y = "Exploitable biomass (t)") +
+  theme_bw(base_size = 14)
 
 ggsave(paste0(out_path, "/biomass_total_", YEAR, ".png"), 
-       dpi=300, height=4, width=7, units="in")
+       dpi=300, height=3.5, width=5.5, units="in")
+
+ Presentation total biomass ----
+ggplot(data = re_total %>% 
+         filter(year >= 2002) %>% 
+         mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) +
+  geom_line(aes(x = year, y = re_est, col = species),
+            size = 1) +
+  geom_ribbon(aes(x = year, ymin = re_lci, ymax = re_uci, fill = species),
+              alpha = 0.3, col = "white") +
+  scale_color_manual(values = c("#6ba292", "#f0b74a")) +
+  scale_fill_manual(values = c("#6ba292", "#f0b74a")) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = NULL, title = "Exploitable biomass (t)",
+       col = NULL, fill = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+ggsave(paste0(out_path, "/pres_biom_", YEAR, ".png"), 
+       dpi=300, height=3, width=4, units="in")
+
+# Presentation catch ----
+ggplot(data = catch %>%
+         mutate(species = ifelse(species_name == "SST", "SST", "non-SST")) %>%
+         group_by(year, species) %>%
+         summarize(Catch = sum(tons)) %>% 
+         mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) +
+  geom_area(aes(x = year, y = Catch, fill = species),
+            alpha = 0.5 , size = 0.5, colour = "white") +
+  scale_fill_manual(values = c("#6ba292", "#f0b74a")) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = NULL, title = "Catch (t)", fill = NULL) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top",
+        plot.title = element_text(hjust = 0.5))
+
+ggsave(paste0(out_path, "/pres_catch_", YEAR, ".png"), 
+       dpi=300, height=3, width=4, units="in")
 
 # Plot Catch/ABC/OFL  ----
 
@@ -665,18 +740,21 @@ specs %>%
   mutate(name = factor(name, levels = c("Catch", "ABC", "OFL"), ordered = TRUE)) %>% 
   ggplot(aes(x = year, y = value, col = name, lty = name, size = name)) + #
   geom_line() +
-  facet_wrap(~ species, scales = "free", ncol = 1) +
+  # facet_wrap(~ species, scales = "free", ncol = 1) +
   scale_y_continuous(labels = scales::comma) +
   scale_colour_grey() +
   scale_size_manual(values = c(.5, 1, 1)) +
-  labs(x = NULL, y = "Catch (t)", col = NULL, size = NULL, lty = NULL) +
+  labs(x = NULL, y = NULL, title = "BSAI Other Rockfish",
+       subtitle = "Comparison of catch to ABC/OFL (t)", 
+       col = NULL, size = NULL, lty = NULL) +
   expand_limits(y = 0) +
-  theme_bw() +
+  theme_bw(base_size = 14) +
   theme(panel.grid.major = element_line(colour = "white"),
-        panel.grid.minor = element_line(colour = "white"))
+        panel.grid.minor = element_line(colour = "white"),
+        legend.position = c(0.8, 0.2))
 
 ggsave(paste0(out_path, "/total_catch_abc_ofl_", YEAR, ".png"), 
-       dpi=300, height=4, width=5, units="in")
+       dpi=300, height=4, width=4.5, units="in")
 
 # Catch to biomass ratio ----
 
@@ -716,6 +794,90 @@ ggsave(paste0(out_path, "/ratio_catch_biomass_", YEAR, ".png"),
 ratio %>% 
   group_by(FMP, species) %>% 
   summarize(mean_ratio = mean(ratio))
+
+ratio %>% filter(year == YEAR & species == "non-SST" & FMP == "AI")
+
+# Presentation catch/biomass----
+
+# refs <- data.frame(FMP = c("AI", "EBS"),
+#                    yint = c(1, NA)) %>% 
+#   mutate(FMP = factor(FMP, 
+#                       labels = c("Aleutian Islands", "Eastern Bering Sea"),
+#                       levels = c("AI", "EBS"), 
+#                       ordered = TRUE))
+ratio %>% 
+  mutate(FMP = factor(FMP, 
+                      labels = c("Aleutian Islands", "Eastern Bering Sea"),
+                      levels = c("AI", "EBS"), 
+                      ordered = TRUE),
+         species = factor(species, 
+                          levels = c("SST", "non-SST"), 
+                          ordered = TRUE)) %>% 
+  # group_by(year, species) %>% 
+  # summarize(ratio = sum(Catch) / sum(biomass)) %>% 
+  ggplot(aes(x = year, y = ratio, col = species, lty = FMP)) +
+  geom_line(size = 1) +
+  labs(x = NULL, y = NULL, title = "Exploitation rate (catch/biomass)",
+       # subtitle = "Note differences in y-axis scale",
+       col = NULL, fill = NULL, lty = NULL) +
+  geom_hline(data = refs, aes(yintercept = yint),
+             col = "red", lty = 3) +
+  # facet_wrap(~species, scales = "free_y") +
+  # geom_hline(y = 1)
+  scale_color_manual(values = c("#6ba292", "#f0b74a")) + #, guide = 'none') +
+  theme_minimal(base_size = 13) +
+  theme(#legend.position = "top",
+        plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5)#,
+        # panel.grid.major = element_line(colour = "white"),
+        # panel.grid.minor = element_line(colour = "white")
+        )
+
+ggsave(paste0(out_path, "/pres_ratio_", YEAR, ".png"), 
+       dpi=300, height=4, width=7, units="in")
+
+
+# SARA ----
+
+# http://dev-afsc.nmfs.local/REFM/Stocks/Plan_Team/SARA/SARAdata.php
+
+# Re-run as full complex (not split into SST/non-SST)
+sara_dat <- full_biom %>% 
+  mutate(species = "Other_Rockfish_SARA",
+         region = survey) %>% 
+  group_by(species, region, year) %>% 
+  summarize(biomass = sum(biomass),
+            var = sum(var)) %>% 
+  ungroup() %>% 
+  # Currently years with 0 biomass are removed from RE model
+  mutate(cv = ifelse(biomass == 0, 0, sqrt(var) / biomass)) %>% 
+  arrange(species, region, year) 
+
+out_sara <- run_re_model(data = sara_dat)
+sara_biomass <- out_sara$re_output %>% 
+  filter(region == "TOTAL")
+sara_biomass %>% filter(year == YEAR)
+sara_biomass %>% pull(year)
+sara_biomass %>% mutate(re_est = round(re_est, 0)) %>% pull(re_est)
+
+catch %>%
+  group_by(year) %>%
+  summarize(catch = round(sum(tons), 0)) %>% 
+  pull(catch)
+
+# Survey biomass data
+aisrv <- sara_dat %>% filter(region == "AI")
+aisrv %>% pull(year)
+round(aisrv %>% pull(biomass))
+
+ebsshelfsrv <- sara_dat %>% filter(region == "EBS_SHELF")
+ebsshelfsrv %>% pull(year)
+round(ebsshelfsrv %>% pull(biomass))
+
+ebsslopesrv <- sara_dat %>% filter(region == "EBS_SLOPE")
+ebsslopesrv %>% pull(year)
+round(ebsslopesrv %>% pull(biomass))
+
 # other ----
 
 # other ways the complex has been split up...
