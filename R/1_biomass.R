@@ -37,9 +37,13 @@ out_path <- paste0("results/", YEAR) # directory for results/output
 dir.create(out_path)
 tpl_dir <- file.path("admb")
 files <- list.files(file.path(tpl_dir)) # searchable file list
-tpl <- file.path(tpl_dir, files[which(grepl(".tpl", files))]) # find .tpl
-exe <- file.path(tpl_dir, files[which(grepl(".exe", files))]) # find .exe
+tpl <- file.path(tpl_dir, files[which(grepl("RE.tpl", files))]) # find .tpl
+exe <- file.path(tpl_dir, files[which(grepl("RE.exe", files))]) # find .exe
 std <- paste0("RE.std")
+# single survey version
+stpl <- file.path(tpl_dir, files[which(grepl("RES.tpl", files))]) # find .tpl
+sexe <- file.path(tpl_dir, files[which(grepl("RES.exe", files))]) # find .exe
+
 
 # Executable ----
 
@@ -91,7 +95,7 @@ data_sst_nonSST <- full_biom %>%
   mutate(cv = ifelse(biomass == 0, 0, sqrt(var) / biomass)) %>% 
   arrange(species, region, year) 
 
-out_sst_nonSST <- run_re_model(data = data_sst_nonSST)
+out_sst_nonSST <- run_re_model(data = data_sst_nonSST, n_logsdlam = "single")
 
 # Species glimpse ----
 
@@ -877,6 +881,56 @@ round(ebsshelfsrv %>% pull(biomass))
 ebsslopesrv <- sara_dat %>% filter(region == "EBS_SLOPE")
 ebsslopesrv %>% pull(year)
 round(ebsslopesrv %>% pull(biomass))
+
+# logsdlam ----
+
+# multi survey tpl with single logsdlam
+msrv_slam <- run_re_model(data = data_sst_nonSST, n_logsdlam = "single")
+names(msrv_slam)
+
+
+# multi survey tpl with a logsdlam for each survey
+msrv_mlam <- run_re_model(data = data_sst_nonSST, n_logsdlam = "multiple")
+
+# single survey tpl
+sout <- run_sre_model(data = data_sst_nonSST)
+
+logsdlam <- msrv_slam$logsdlam %>% 
+  left_join(msrv_slam$diagnostics) %>% 
+  mutate(tpl = "multi-survey tpl",
+         n_logsdlam = "single logsdlam for all surveys") %>% 
+  bind_rows(msrv_mlam$logsdlam %>% 
+    left_join(msrv_mlam$diagnostics) %>% 
+    mutate(tpl = "multi-survey tpl",
+           n_logsdlam = "logsdlam for each survey")) %>% 
+  bind_rows(sout$logsdlam %>% 
+    left_join(sout$diagnostics) %>% 
+    mutate(tpl = "single survey tpl",
+           n_logsdlam = "logsdlam for each survey"))
+
+logsdlam <- logsdlam %>% 
+  mutate(lci = logsdlam - 1.96 * logsdlam_se * logsdlam,
+         uci = logsdlam + 1.96 * logsdlam_se * logsdlam,
+         region = ifelse(!is.na(region), region,
+                         ifelse(is.na(region) & !is.na(area), area,
+                         "COMBINED"))) %>% 
+  mutate(region = factor(region,
+                         levels = c("AI", "SBS", "EBS_SLOPE", "EBS_SHELF", "COMBINED"),
+                         ordered = TRUE)) %>% 
+  select(-area)
+
+ggplot(logsdlam, 
+       aes(x = region, y = logsdlam, 
+           col = tpl,
+           ymin = lci, ymax = uci)) +
+  geom_point() +
+  geom_errorbar(width = 0.3) +
+  facet_grid(species ~ n_logsdlam) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
+  labs(x = NULL)
+  
+ggsave(paste0(out_path, "/logsdlam_by_tpl_bsai_orox.png"),
+       dpi = 400, height = 4, width = 10, units = "in")
 
 # other ----
 

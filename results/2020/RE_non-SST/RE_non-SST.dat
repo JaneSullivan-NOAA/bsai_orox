@@ -3,9 +3,9 @@
  # Number of survey indices fit (i.e., regions/depth strata) 
  4 
  # Number or process error parameters 
- 1 
+ 4 
  # Process error index 
- 1 1 1 1 
+ 1 2 3 4 
  # Number of surveys 
  39 
  # Survey years 

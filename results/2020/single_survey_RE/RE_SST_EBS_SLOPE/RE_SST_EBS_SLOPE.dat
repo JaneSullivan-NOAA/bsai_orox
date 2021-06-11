@@ -1,0 +1,11 @@
+# Single survey RE for SST EBS_SLOPE 
+ # Model start and end years 
+ 2002 2016 
+ # nobs 
+ 6 
+ # Years 
+ 2002 2004 2008 2010 2012 2016 
+ # Biomass estimates 
+ 16940.35 18792.78 26054.64 29334.5 29564.64 35947.6 
+ # Biomass CV 
+ 0.1156736 0.08952124 0.1245379 0.1165784 0.1065836 0.1147916 
