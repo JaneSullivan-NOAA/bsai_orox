@@ -43,7 +43,7 @@ safe
 #*.psv
 *.r01
 #*.rep
-*.std
+#*.std
 *.out
 *.ps
 sims
@@ -55,6 +55,11 @@ diags
 *.r02
 *.plt
 *.pin
+*.luu
+*.rhes
+*.bgs
+hesscheck
+hessian.bin
 
 # other file types we don't want to track
 *.xlsx
