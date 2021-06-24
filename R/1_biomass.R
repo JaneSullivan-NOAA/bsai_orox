@@ -36,16 +36,6 @@ dat_path <- paste0("data/", YEAR) # directory where source data is contained
 out_path <- paste0("results/", YEAR) # directory for results/output
 dir.create(out_path)
 tpl_dir <- file.path("admb")
-files <- list.files(file.path(tpl_dir)) # searchable file list
-tpl <- file.path(tpl_dir, files[which(grepl("RE.tpl", files))]) # find .tpl
-exe <- file.path(tpl_dir, files[which(grepl("RE.exe", files))]) # find .exe
-std <- paste0("RE.std")
-# single survey version
-stpl <- file.path(tpl_dir, files[which(grepl("RES.tpl", files))]) # find .tpl
-sexe <- file.path(tpl_dir, files[which(grepl("RES.exe", files))]) # find .exe
-
-
-# Executable ----
 
 # If there's not an exe for the RE model, create one. If you update the tpl,
 # you'll need to recompile it manually.
@@ -56,6 +46,23 @@ if(!file.exists("RE.exe")) {
   setup_admb()
   compile_admb("RE", verbose = TRUE)
 }
+
+if(!file.exists("re_test.exe")) {
+  setup_admb()
+  compile_admb("re_test", verbose = TRUE)
+}
+
+setwd(root)
+files <- list.files(file.path(tpl_dir)) # searchable file list
+tpl <- file.path(tpl_dir, files[which(grepl("RE.tpl", files))]) # find .tpl
+exe <- file.path(tpl_dir, files[which(grepl("RE.exe", files))]) # find .exe
+std <- paste0("RE.std")
+# single survey version - this is the version on github...
+stpl <- file.path(tpl_dir, files[which(grepl("RES.tpl", files))]) # find .tpl
+sexe <- file.path(tpl_dir, files[which(grepl("RES.exe", files))]) # find .exe
+# this is the single survey version cole emailed me 20210611
+stpl <- file.path(tpl_dir, files[which(grepl("re_test.tpl", files))]) # find .tpl
+sexe <- file.path(tpl_dir, files[which(grepl("re_test.exe", files))]) # find .exe
 
 # Data ----
 
@@ -95,6 +102,7 @@ data_sst_nonSST <- full_biom %>%
   mutate(cv = ifelse(biomass == 0, 0, sqrt(var) / biomass)) %>% 
   arrange(species, region, year) 
 
+# Run mod ----
 out_sst_nonSST <- run_re_model(data = data_sst_nonSST, n_logsdlam = "single")
 
 # Species glimpse ----
@@ -919,12 +927,18 @@ logsdlam <- logsdlam %>%
                          ordered = TRUE)) %>% 
   select(-area)
 
-ggplot(logsdlam, 
+logsdlam %>% 
+  arrange(species, region, n_logsdlam) %>% 
+  select(species, region, tpl, n_logsdlam, logsdlam, sd = logsdlam_se)
+
+ggplot(logsdlam %>% filter(!c(species == "non-SST" & 
+                            n_logsdlam == "logsdlam for each survey" &
+                            region == "EBS_SLOPE")), 
        aes(x = region, y = logsdlam, 
            col = tpl,
            ymin = lci, ymax = uci)) +
-  geom_point() +
-  geom_errorbar(width = 0.3) +
+  geom_point(position=position_dodge(width=0.2)) +
+  geom_errorbar(width = 0.3, position=position_dodge(width=0.2)) +
   facet_grid(species ~ n_logsdlam) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)) +
   labs(x = NULL)

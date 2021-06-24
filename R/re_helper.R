@@ -180,21 +180,23 @@ run_re_model <- function(data,
 
 # single species version ----
 
-
-  
-dir.create(paste0(out_path, "/single_survey_RE"))
-
-run_sre_model <- function(data) {
+run_sre_model <- function(data,
+                          # use all years (same as multi-survey vs)?
+                          all_years = TRUE) {
+    
+  dir.create(paste0(out_path, "/single_survey_RE"))
   
   setwd(root)
-  
+  # data = data_sst_nonSST; all_years = TRUE
   input_biom <- data 
+  syr <- min(input_biom$year)
   spp <- unique(input_biom$species)
 
   diagnostics <- list() # for model diagnostics (convergence, mgc)
   re_output <- list() # random effect biomass estimate output
   logsdlam <- list() # process error
   
+  # i=1;j=1
   for(i in 1:length(spp)) {
     
     # SST is only in 3 surveys, non-SST in 4
@@ -213,8 +215,10 @@ run_sre_model <- function(data) {
       file.copy(from = stpl, to = spp_out, overwrite = TRUE)
       file.copy(from = sexe, to = spp_out, overwrite = TRUE)
       setwd(spp_out)
-      file.rename("RES.tpl", paste0(name, ".tpl"))
-      file.rename("RES.exe", paste0(name, ".exe"))
+      # file.rename("RES.tpl", paste0(name, ".tpl")) # file on github
+      # file.rename("RES.exe", paste0(name, ".exe"))
+      file.rename("re_test.tpl", paste0(name, ".tpl")) # file cole emailed me 20210611
+      file.rename("re_test.exe", paste0(name, ".exe"))
       
       # prep for dat file
       sppdat <- input_biom %>% 
@@ -222,10 +226,19 @@ run_sre_model <- function(data) {
         # zeros are removed, treated as NAs
         filter(biomass > 0) %>% 
         arrange(year)
+      
+      # fill in missing years with NAs
+      if(isTRUE(all_years)) {
+        sppdat <- tibble(year = syr:YEAR) %>% 
+          left_join(sppdat) 
+      }
+      
       nobs <- length(unique(sppdat$year))
       yrs <- sppdat %>% pull(year)
       srv_est <- sppdat %>% pull(biomass)
+      srv_est[is.na(srv_est)] <- "-9" # ADMB flag for NA or zero data
       srv_cv <- sppdat %>% pull(cv)
+      srv_cv[is.na(srv_cv)] <- "-9" # ADMB flag for NA or zero data
       
       # Write dat file
       cat("# Single survey RE for", spp[i], regions[j], "\n",

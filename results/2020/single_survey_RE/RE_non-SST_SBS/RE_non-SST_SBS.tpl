@@ -1,4 +1,4 @@
-// Random walk model for survey averaging using log-scale process and observation errors
+ // Random walk model for survey averaging using log-scale process and observation errors
 DATA_SECTION
   init_int styr
   init_int endyr
@@ -38,20 +38,20 @@ PROCEDURE_SECTION
 
   for(int i=1; i<=nobs; ++i)
   {
-    obs(biom(yrs_srv(i)),i);
+   if(srv_est(i)>0)  obs(biom(yrs_srv(i)),i);
   }
   if (sd_phase()) 
   {
     biomA = exp(biom);
     biomsd = biom;
   }
-	if (mceval_phase())
+ if (mceval_phase())
   {
     biomA = exp(biom);
     biomsd = biom;
 	  cout <<biomA<<endl;
-	}
-	jnll += square(logSdLam+1.5);// Modest penalty to keep process error from getting too large...
+  }
+	
 
 SEPARABLE_FUNCTION void step(const dvariable& biom1, const dvariable& biom2, const dvariable& logSdLam)
   dvariable var=exp(2.0*logSdLam);
