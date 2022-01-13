@@ -11,7 +11,7 @@
 # Set up ----
 
 # Assessment year (most recent year with complete data set)
-YEAR <- 2019
+YEAR <- 2022
 dat_path <- paste0("data/", YEAR) # directory where source data is contained
 out_path <- paste0("results/", YEAR) # directory for results/output
 dir.create(out_path)
