@@ -1,12 +1,12 @@
 # Queries for BSAI OROX
 # Contact: jane.sullivan@noaa.gov
-# Last updated: Oct 2020
+# Last updated: Feb 2022
 
 # devtools::session_info()
-# version  R version 4.0.2 (2020-06-22)
-# os       Windows 10 x64              
-# system   x86_64, mingw32             
-# ui       RStudio 
+# version  R version 4.1.2 (2021-11-01)
+# os       Windows 10 x64 (build 19042)
+# system   x86_64, mingw32
+# ui       RStudio
 
 # Note: also includes analysis using observer data to partition thornyhead catch
 # to shortspine (SST) and other thornyhead
@@ -14,7 +14,7 @@
 # Set up ----
 
 # Assessment year (most recent year with complete data set)
-YEAR <- 2020
+YEAR <- 2022
 
 libs <- c("tidyverse", "RODBC")
 if(length(libs[which(libs %in% rownames(installed.packages()) == FALSE )]) > 0) {
@@ -101,7 +101,8 @@ query <- "select   survey, year, summary_area as area_code, species_code,
                    area_biomass as biomass, biomass_var as var
           from     afsc.race_biomassinpfcaigoa
           where    species_code in (%s) and
-                   survey = 'AI'"
+                   survey = 'AI' and
+                   year >= 1991"
 
 ai <- sqlQuery(channel_akfin, sprintf(query, codes_string)) %>% 
   write_csv(paste0(raw_path, "/ai_biomass_raw_", YEAR, ".csv"))
@@ -121,7 +122,8 @@ query <- "select   survey, year, species_code,
                    biomass, varbio as var
           from     afsc.race_biomass_ebsshelf_standard
           where    species_code in (%s) and 
-                   stratum in ('999')"
+                   stratum in ('999') and 
+                   year >= 1982"
 
 ebs_shelf <- sqlQuery(channel_akfin, sprintf(query, codes_string)) %>% 
   write_csv(paste0(raw_path, "/ebs_shelf_biomass_raw_", YEAR, ".csv"))
@@ -156,7 +158,6 @@ biom <- ai %>%
   bind_rows(ebs_slope) %>% 
   left_join(spp %>% select(species_code, common_name)) %>% # species names
   write_csv(paste0(dat_path, "/bsai_orox_biomass_", YEAR, ".csv"))  
-
 
 # BSAI NMFS Area look up ----
 
@@ -213,9 +214,26 @@ query <- "select   survey, year, stratum, length / 10 as length, species_code,
 ai_len <- sqlQuery(channel_akfin, query) %>% 
   write_csv(paste0(raw_path, "/ai_survey_lengths_sstdusky_raw_", YEAR, ".csv"))
 
+ai_strata <- sqlQuery(channel_akfin,
+                      "select distinct   survey, regulatory_area_name, inpfc_area as area,
+                            stratum, min_depth, max_depth, area
+          from              afsc.race_goastrataaigoa
+          where             survey in ('AI')
+          order by          regulatory_area_name asc, min_depth asc") %>% 
+  rename_all(tolower) %>% 
+  distinct(area, stratum, min_depth, max_depth, fmp = regulatory_area_name) %>% 
+  mutate(description = paste0(area, ' (', min_depth, '-', max_depth, ' m)')) %>% 
+  mutate(description = paste0(min_depth, '-', max_depth, ' m')) %>% 
+  distinct(area, stratum, description)
+
+ai_strata
+
 ai_len <- ai_len %>% 
   rename_all(tolower) %>% 
-  arrange(species_code, year, length)
+  left_join(ai_strata) %>% 
+  filter(area != 'Chirikof') %>% 
+  mutate(area = ifelse(grepl('Aleutians', area), 'AI', 'SBS')) %>% 
+  arrange(species_code, area, year, length) 
 
 # EBS slope - there are no length data collected for duskies on the shelf (and
 # no SST)
@@ -231,31 +249,16 @@ ebs_slope_len <- ebs_slope_len %>%
   rename_all(tolower) %>% 
   arrange(species_code, year, length)
 
-# Write lengths ----
-
-comps <- fsh_len %>% 
-  select(species_code, year, length, frequency, fmp_subarea) %>% 
-  mutate(source = "fishery") %>% 
-  bind_rows(ai_len %>% 
-              select(species_code, year, length, frequency) %>% 
-              mutate(fmp_subarea = "AI",
-                     source = "survey")) %>% 
-  bind_rows(ebs_slope_len %>% 
-              select(species_code, year, length, frequency) %>% 
-              mutate(fmp_subarea = "EBS",
-                     source = "slope survey")) %>% 
-  write_csv(paste0(dat_path, "/lengths_sstdusky_", YEAR, ".csv"))
- 
 # Catch ----
 
 # 3 digit species codes - can't find a look up table for this one.
 # northern rockfish (136) currently in species_group_name = "Other Rockfish"
 # group but shouldn't be. removed from bsai_orox3 list
 
-# query <- "select   distinct agency_species_code, species_name, species_group_name
-#           from     council.comprehensive_blend_ca
-#           where    species_group_name = 'Other Rockfish'"
-# catch_spp <- sqlQuery(channel_akfin, query)
+query <- "select   distinct agency_species_code, species_name, species_group_name
+          from     council.comprehensive_blend_ca
+          where    species_group_name = 'Other Rockfish'"
+catch_spp <- sqlQuery(channel_akfin, query)
 
 # dusky = (154, 172)
 bsai_orox3 <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142, 
@@ -268,8 +271,6 @@ bsai_orox3 <- c(153, 154, 172, 148, 147, 157, 139, 158, 145, 176, 143, 142,
 goa_orox3 <- c(179, 182, 178, 138, 137, 184, 146, 149, 155, 156, 147, 148)
 
 codes_string2 <- toString(sprintf("'%s'", c(bsai_orox3, goa_orox3))) # allows you to pass vector into sql query
-
-# year >= 2019 and
 
 query <- "select   *
           from     council.comprehensive_blend_ca
@@ -365,7 +366,7 @@ observed %>%
 
 prop_sst %>% write_csv(paste0(dat_path, "/prop_sst_catch_2003_", YEAR+1, ".csv"))
 
-# Atka mackerel catch ----
+# Atka mackerel catch EDA ----
 
 query <- "select   *
           from     council.comprehensive_blend_ca
@@ -376,7 +377,18 @@ query <- "select   *
 atka <- sqlQuery(channel_akfin, query) %>% 
   rename_all(tolower) 
 
-atka %>% write_csv(paste0(raw_path, "/atka_ai_catch_raw_2003_", YEAR+1, "_confidential.csv"))
+atka %>% write_csv(paste0(raw_path, "/atka_ai_catch_raw_2003_", YEAR, "_confidential.csv"))
+names(atka)
+unique(atka$sampling_strata_name)
+atka %>%
+  group_by(year, sampling_strata_name, reporting_area_code) %>% 
+  summarise(catch = sum(weight_posted)) %>% 
+  ungroup() %>% 
+  tidyr::complete(year, nesting(sampling_strata_name,reporting_area_code ), fill = list(catch = 0)) %>% 
+  ggplot(aes(x = year, y = catch, col = sampling_strata_name)) +
+  geom_point(size = 2) +
+  geom_line(size = 1) +
+  facet_wrap(~reporting_area_code)
 
 atka_clean <- atka %>% 
   mutate(species = str_replace(species_name, "greenling, ", "")) %>% 
@@ -390,69 +402,7 @@ atka_clean <- atka %>%
 
 atka_clean %>% write_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+1, "_confidential.csv"))
 
-# # EBS biomass EDA ----
-# 
-# # There are multiple EBS Biomass options in AFKIN.AFSC.
-# # RACE_BIOMASS_EBSS_PLUSNW_GRPD and RACE_BIOMASS_EBSS_STANDARD_GRP tables return
-# # empty dataframes for our spp. I ultimately went with
-# # RACE_BIOMASS_EBSSHELF_STANDARD (#3 here) because it includes 1984 and 1985
-# # data and otherwise matches RACE_BIOMASS_EBSSHELF_PLUSNW. It also matches
-# # Ingrid Spies' 2018 All_survey_data_RE.xlsx sheet titled "EBS"
-# 
-# # EBS shelf 1: RACE_BIOMASS_EBSSHELF
-# query <- "select   survey, year, species_code, 
-#                    stratum_biomass as biomass, bio_var as var
-#           from     afsc.race_biomass_ebsshelf
-#           where    species_code in (%s) and 
-#                    stratum in ('999')"
-# 
-# ebs_shelf <- sqlQuery(channel_akfin, sprintf(query, codes_string)) %>% 
-#   rename_all(tolower) %>% 
-#   arrange(species_code, year) %>% 
-#   mutate(table_name = "RACE_BIOMASS_EBSSHELF")
-# 
-# ebs_shelf <- ebs_shelf %>% group_by(table_name, year) %>% summarize(biomass = sum(biomass), var = sum(var)) %>% print(n = Inf)
-# 
-# # EBS shelf 2: RACE_BIOMASS_EBSSHELF_PLUSNW
-# query <- "select   survey, year, species_code, 
-#                    biomass, varbio as var
-#           from     afsc.race_biomass_ebsshelf_plusnw
-#           where    species_code in (%s) and 
-#                    stratum in ('999')"
-# 
-# ebs_shelf2 <- sqlQuery(channel_akfin, sprintf(query, codes_string)) %>% 
-#   rename_all(tolower) %>% 
-#   arrange(species_code, year) %>% 
-#   mutate(table_name = "RACE_BIOMASS_EBSSHELF_PLUSNW")
-# 
-# ebs_shelf2 %>% dim()
-# ebs_shelf2 <- ebs_shelf2 %>% group_by(table_name, year) %>% summarize(biomass = sum(biomass), var = sum(var)) %>% print(n = Inf)
-# 
-# # EBS shelf 3: RACE_BIOMASS_EBSSHELF_STANDARD
-# query <- "select   survey, year, species_code, 
-#                    biomass, varbio as var
-#           from     afsc.race_biomass_ebsshelf_standard
-#           where    species_code in (%s) and 
-#                    stratum in ('999')"
-# 
-# ebs_shelf3 <- sqlQuery(channel_akfin, sprintf(query, codes_string)) %>% 
-#   rename_all(tolower) %>% 
-#   arrange(species_code, year) %>% 
-#   mutate(table_name = "RACE_BIOMASS_EBSSHELF_STANDARD")
-# 
-# ebs_shelf3 %>% dim()
-# ebs_shelf3 <- ebs_shelf3 %>% group_by(table_name, year) %>% summarize(biomass = sum(biomass), var = sum(var)) %>% print(n = Inf)
-# 
-# ebs_shelf %>% 
-#   bind_rows(ebs_shelf2) %>% 
-#   bind_rows(ebs_shelf3) %>% 
-#   ggplot(aes(x = year, y = biomass, fill = table_name)) +
-#   geom_bar(stat = "identity", position = "dodge", width = 0.8, col = "black") 
-# 
-# ebs_shelf3 %>% filter(year %in% c(1984, 1985))
-# 
-
-# Dusky bycatch ----
+# Dusky bycatch EDA ----
 query <- "select    a.year, a.species, a.species_name,
                     a.extrapolated_weight, b.gear_type, b.latdd_start, b.londd_start,
                     b.nmfs_area, a.haul_join
@@ -471,3 +421,77 @@ dusky <- sqlQuery(channel_afsc, query) %>%
   rename_all(tolower) 
 
 dusky %>% write_csv(paste0(raw_path, "/obs_dusky_2003_", YEAR, "_confidential.csv"))
+
+# LLS ----
+
+lls <- sqlQuery(channel_akfin, query = ("
+                select    *
+                from      afsc.lls_area_rpn_all_strata
+                where     species_code = '30020' and fmp_management_area = 'BSAI'
+                order by  year asc
+                ")) %>% 
+  rename_all(tolower) 
+unique(lls$geographic_area_name)
+
+names(lls)
+
+llssum <- lls %>% 
+  filter(country == 'United States' & 
+           !geographic_area_name %in% c('NW Aleutians slope', 'SW Aleutians slope')) %>% 
+  mutate(strata = ifelse(geographic_area_name %in% c('NE Aleutians slope', 'SE Aleutians slope'),
+                         'Eastern AI', 'EBS Slope')) %>% 
+  group_by(strata, year) %>% 
+  dplyr::summarise(cpue = sum(rpw, na.rm = TRUE),
+                  cv = sqrt(sum(rpw_var, na.rm = TRUE)) / cpue)
+
+llssum %>% 
+  ggplot(aes(x = year, y = cpue)) +
+  geom_line() +
+  geom_point() +
+  facet_wrap(~strata)
+
+llssum %>% write_csv(paste0(dat_path, '/lls_rpw_sst.csv'))
+
+lls %>% 
+  filter(!is.na(rpn)) %>% 
+  ggplot(aes(x = year, y = rpn, col = country)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(~geographic_area_name, scales = 'free_y')
+
+# LLS lengths ----
+
+lls_len <- sqlQuery(channel_akfin, query = ("
+                select    *
+                from      afsc.lls_length_rpn_by_area_all_strata
+                where     species_code = '30020' 
+                order by  year asc
+                ")) %>% 
+  rename_all(tolower) 
+
+lls_len_sum <- lls_len %>% 
+  filter(grepl(c('Bering|Aleutians'), geographic_area_name)) %>% 
+  group_by(year, council_sablefish_management_area, length) %>% 
+  dplyr::summarise(rpw = sum(rpw, na.rm = TRUE)) %>% 
+  write_csv(paste0(dat_path, '/lls_length_sst.csv'))
+
+# Write lengths ----
+
+comps <- fsh_len %>% 
+  select(species_code, year, length, frequency, fmp_subarea) %>% 
+  mutate(source = paste0(fmp_subarea, " fishery")) %>% 
+  bind_rows(ai_len %>% 
+              mutate(fmp_subarea = area,
+                     source = "AI BTS") %>% 
+              select(species_code, year, fmp_subarea, length, frequency, source)) %>% 
+  bind_rows(ebs_slope_len %>% 
+              select(species_code, year, length, frequency) %>% 
+              mutate(fmp_subarea = "EBS",
+                     source = "EBS slope BTS")) %>% 
+  bind_rows(lls_len_sum %>% 
+              ungroup() %>% 
+              mutate(species_code = 30020,
+                     fmp_subarea = ifelse(council_sablefish_management_area == 'Aleutians', 'AI', 'EBS'),
+                     source = paste0(fmp_subarea, ' LLS')) %>% 
+              select(species_code, year, fmp_subarea, length, frequency = rpw, source)) %>% 
+  write_csv(paste0(dat_path, "/lengths_sstdusky_", YEAR, ".csv"))

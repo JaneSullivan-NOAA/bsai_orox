@@ -606,7 +606,7 @@ ggplot(data = re_total %>%
 ggsave(paste0(out_path, "/biomass_total_", YEAR, ".png"), 
        dpi=300, height=3.5, width=5.5, units="in")
 
- Presentation total biomass ----
+# Presentation total biomass ----
 ggplot(data = re_total %>% 
          filter(year >= 2002) %>% 
          mutate(species = factor(species, levels = c("SST", "non-SST"), ordered = TRUE))) +

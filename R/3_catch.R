@@ -1,6 +1,6 @@
 # Catch tables
 # Contact: jane.sullivan@noaa.gov
-# Last updated: Oct 2020
+# Last updated: Sep 2022
 
 # devtools::session_info()
 # version  R version 4.0.2 (2020-06-22)
@@ -11,11 +11,11 @@
 # Set up ----
 
 # Assessment year (most recent year with complete data set)
-YEAR <- 2019
+YEAR <- 2022
 
 # date that catch was queried - important for long-term record keeping, tracking
 # changes to db and tracing discrepancies in catch
-access_date <- "10/13/2020" 
+access_date <- "10/03/2022" 
 
 libs <- c("tidyverse", "R2admb", "viridis")
 if(length(libs[which(libs %in% rownames(installed.packages()) == FALSE )]) > 0) {
@@ -28,7 +28,7 @@ options(scipen = 999)
 
 root <- getwd()
 dat_path <- paste0("data/", YEAR) # directory where source data is contained
-out_path <- paste0("results/", YEAR+1) # directory for results/output
+out_path <- paste0("results/", YEAR) # directory for results/output
 dir.create(out_path)
 
 # Data ----
@@ -47,7 +47,7 @@ load("data/map_ak_land.RData")
 load("data/map_nmfs_areas.RData")
 
 # directed atka catch
-atka <- read_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR+1, "_confidential.csv"))
+atka <- read_csv(paste0(dat_path, "/atka_ai_targeted_catch_2003_", YEAR, "_confidential.csv"))
 
 # non-commercial catch - have to pull this from the AKFIN Answers dashboard
 agency_catch <- read_csv(paste0(dat_path, "/Noncommercial_Fishery_Catch_AKFIN_DASH_20201019.csv"))
@@ -164,7 +164,6 @@ Islands and Bering Sea since 2003.")),
             file = paste0(out_path, "/catch_tables_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = FALSE, eol = "\n", append = TRUE)
 write.table(f_catch_spp, file = paste0(out_path, "/catch_tables_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = TRUE, eol = "\n", append = TRUE)
 
-
 # Complex by NMFS area ----
 
 catch %>% 
@@ -219,6 +218,33 @@ catch %>%
   labs(x = NULL, y = "Catch (t)", fill = "Complex")
 
 ggsave(paste0(out_path, "/catch_complexXarea_", YEAR, ".png"), 
+       dpi=300, height=4, width=7, units="in")
+
+catch %>% 
+  mutate(complex = ifelse(species_name == "SST", "SST", "non-SST")) %>% 
+  group_by(year, complex) %>% 
+  summarize(catch = sum(tons)) %>% 
+  pivot_wider(id_cols = c(year), 
+              names_from = complex, values_from = catch, 
+              values_fill = 0) %>% 
+  mutate(prop_nonsst = `non-SST` / (`non-SST` + SST) * 100) %>% 
+  ungroup() %>% 
+  mutate(mean_prop = mean(prop_nonsst))
+
+100-56.1
+
+data.frame(complex = c("SST", "non-SST", "SST", "non-SST"),
+           prop = c(43.9, 56.1, 95, 5),
+           var = c("Catch", "Catch", "Biomass", "Biomass")) %>% 
+  ggplot(aes(x = "", y = prop, fill = complex)) +
+  geom_bar(stat = 'identity', width = 1, col = 'white', alpha = .7) +
+  labs(fill = NULL) +
+  scale_fill_manual(values = c("#f0b74a","#6ba292")) +
+  coord_polar("y", start = 0) +
+  theme_void(base_size = 18) +
+  facet_wrap(~var)
+
+ggsave(paste0(out_path, "/piechart_", YEAR, ".png"), 
        dpi=300, height=4, width=7, units="in")
 
 # By area and major species
@@ -565,6 +591,23 @@ f_perc_discarded
 write.table(c(paste0("\n", "Retained and discarded catch of Other Rockfish species since 2003 in the Aleutian Islands and Bering Sea. ")), 
             file = paste0(out_path, "/catch_tables_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = FALSE, eol = "\n", append = TRUE)
 write.table(f_perc_discarded, file = paste0(out_path, "/catch_tables_", YEAR, ".csv"), sep=",", quote = FALSE, row.names = FALSE, col.names = TRUE, eol = "\n", append = TRUE)
+
+drates <- catch %>% 
+  mutate(complex = ifelse(species_name == "SST", "SST", "non-SST"),
+         retained_or_discarded = ifelse(retained_or_discarded == "D", "Discarded", "Retained")) %>% 
+  group_by(complex, year) %>% 
+  summarize(discard_rate = sum(tons[retained_or_discarded == "Discarded"]) / sum(tons)) %>% 
+  group_by( complex) 
+
+drates %>% 
+  ggplot(aes(x = year, y = discard_rate, col = fmp_subarea)) +
+  geom_line() +
+  facet_wrap(~complex)
+
+drates %>% 
+  summarize(mean_discard_rate = mean(discard_rate),
+         sd_discard_rate = sd(discard_rate)) %>% 
+  print(n=Inf)
 
 catch %>% 
   mutate(complex = ifelse(species_name == "SST", "SST", "non-SST"),
